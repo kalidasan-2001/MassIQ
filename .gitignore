@@ -1,0 +1,40 @@
+# Environment / secrets
+.env
+*.env
+
+# Python
+venv/
+.venv/
+backend/venv/
+backend/.venv/
+__pycache__/
+*.pyc
+
+# Node
+node_modules/
+frontend/node_modules/
+dist/
+frontend/dist/
+.vite/
+frontend/.vite/
+
+# Logs
+*.log
+
+# Generated files
+storage/
+exports/
+backend/app/storage/
+backend/storage/
+*.pdf
+
+# Backups / legacy folders
+_backup_before_flatten/
+_recovery_candidates/
+_live_before_validated_restore*/
+massiq-mvp/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/

@@ -1,0 +1,14 @@
+fastapi
+uvicorn
+python-multipart
+pymupdf
+pillow
+opencv-python
+numpy
+openpyxl
+pandas
+pydantic
+python-dotenv
+openai
+reportlab
+rapidocr-onnxruntime
