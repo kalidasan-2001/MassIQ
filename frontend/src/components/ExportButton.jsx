@@ -18,6 +18,7 @@ export default function ExportButton(props) {
         subtracted_correction_area_m2: Number(props.subtractedCorrectionAreaM2 || 0),
         height_m: Number(props.heightM),
         volume_m3: Number(props.volumeM3),
+        deductions: Array.isArray(props.deductions) ? props.deductions : [],
         review_status: props.reviewStatus || 'Completed',
         notes: props.notes || '',
       }, {

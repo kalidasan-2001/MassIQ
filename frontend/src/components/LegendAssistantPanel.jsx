@@ -22,6 +22,16 @@ export default function LegendAssistantPanel({
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
+  const nextActionHint = (() => {
+    if (!canConfirmHatchSample) {
+      if (!String(componentName || '').trim()) return 'Next: enter the component name.'
+      return 'Next: select the hatch pattern from the legend.'
+    }
+    if (!hatchSample?.hatch_sample_id) return 'Next: confirm the hatch sample to save it.'
+    if (!debug?.canAutoDetect) return 'Next: confirm the plan scale to enable detection.'
+    return 'Ready: run detection from the Detection panel.'
+  })()
+
   const saveHatchSample = async () => {
     if (!canConfirmHatchSample || !hatchBox) {
       setError('Select a hatch sample area on the plan before confirming.')
@@ -56,26 +66,7 @@ export default function LegendAssistantPanel({
         component. This sample is sent to the backend and used for real hatch detection.
       </p>
       {vlmNotes && <p className="muted">VLM note: {vlmNotes}</p>}
-      <div className="workflow-grid" style={{ marginBottom: 16 }}>
-        <div className="workflow-step">
-          <strong>Legend Area</strong>
-          <div className={`status-pill ${legendBox ? 'status-completed' : 'status-progress'}`}>
-            {legendBox ? `${legendBox.w} x ${legendBox.h}px` : 'Select on plan'}
-          </div>
-        </div>
-        <div className="workflow-step">
-          <strong>Hatch Sample</strong>
-          <div className={`status-pill ${hatchBox ? 'status-completed' : 'status-progress'}`}>
-            {hatchBox ? `${hatchBox.w} x ${hatchBox.h}px` : 'Select on plan'}
-          </div>
-        </div>
-        <div className="workflow-step">
-          <strong>Backend Sample</strong>
-          <div className={`status-pill ${hatchSample ? 'status-completed' : 'status-progress'}`}>
-            {hatchSample ? hatchSample.hatch_sample_id.slice(0, 8) : 'Not saved'}
-          </div>
-        </div>
-      </div>
+      <p className="muted"><strong>{nextActionHint}</strong></p>
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
         <button className="btn" onClick={onStartLegendSelection}>
           Select Legend Area
@@ -108,16 +99,39 @@ export default function LegendAssistantPanel({
           <img src={hatchPreviewUrl} alt="Hatch preview" style={{ width: 80, height: 80, objectFit: 'cover', borderRadius: 8, border: '1px solid #cbd7df' }} />
         </div>
       )}
-      {debug && (
-        <pre className="debug-box">
+      <details className="advanced-details" style={{ marginTop: 12 }}>
+        <summary>Advanced details</summary>
+        <div className="workflow-grid" style={{ marginTop: 12, marginBottom: 12 }}>
+          <div className="workflow-step">
+            <strong>Legend Area</strong>
+            <div className={`status-pill ${legendBox ? 'status-completed' : 'status-progress'}`}>
+              {legendBox ? `${legendBox.w} x ${legendBox.h}px` : 'Select on plan'}
+            </div>
+          </div>
+          <div className="workflow-step">
+            <strong>Hatch Sample</strong>
+            <div className={`status-pill ${hatchBox ? 'status-completed' : 'status-progress'}`}>
+              {hatchBox ? `${hatchBox.w} x ${hatchBox.h}px` : 'Select on plan'}
+            </div>
+          </div>
+          <div className="workflow-step">
+            <strong>Backend Sample</strong>
+            <div className={`status-pill ${hatchSample ? 'status-completed' : 'status-progress'}`}>
+              {hatchSample ? hatchSample.hatch_sample_id.slice(0, 8) : 'Not saved'}
+            </div>
+          </div>
+        </div>
+        {debug && (
+          <pre className="debug-box">
 {`selectionMode=${debug.selectionMode}
 legendBox=${debug.legendBox}
 hatchBox=${debug.hatchBox}
 backendHatchSampleId=${debug.backendHatchSampleId}
 canConfirmHatchSample=${debug.canConfirmHatchSample}
 canAutoDetect=${debug.canAutoDetect}`}
-        </pre>
-      )}
+          </pre>
+        )}
+      </details>
       {error && <p className="error">{error}</p>}
     </div>
   )

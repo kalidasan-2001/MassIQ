@@ -17,6 +17,8 @@ dist/
 frontend/dist/
 .vite/
 frontend/.vite/
+.npm-cache/
+frontend/.npm-cache/
 
 # Logs
 *.log

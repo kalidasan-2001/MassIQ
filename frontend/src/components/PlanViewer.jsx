@@ -21,6 +21,10 @@ const round = (value, decimals = 2) => {
 
 const areaFromRect = (rect) => Math.max(0, Number(rect?.w || 0)) * Math.max(0, Number(rect?.h || 0))
 
+const correctionCount = (region) => Math.max(1, Math.round(Number(region?.count) || 1))
+
+const correctionLineTotalM2 = (region) => Number(region?.area_m2 || 0) * correctionCount(region)
+
 const clampBoxToImage = (box, naturalSize) => {
   if (!box || !naturalSize.width || !naturalSize.height) return null
   const width = Math.max(1, Math.min(naturalSize.width, Math.round(box.w)))
@@ -88,6 +92,7 @@ export default function PlanViewer({ file_id, page_image_url, backendBase = 'htt
   const [heightConfirmed, setHeightConfirmed] = useState(false)
   const [planNotes, setPlanNotes] = useState('Ready for manual legend and hatch selection.')
   const [componentName, setComponentName] = useState(COMPONENT_NAME)
+  const [activeStep, setActiveStep] = useState(0)
 
   const renderedPageUrl = page_image_url.startsWith('http') ? page_image_url : `${backendBase}${page_image_url}`
 
@@ -117,13 +122,29 @@ export default function PlanViewer({ file_id, page_image_url, backendBase = 'htt
     [corrections]
   )
   const subtractedCorrectionAreaPx = useMemo(
-    () => corrections.filter((item) => item.kind === 'subtract').reduce((sum, region) => sum + areaFromRect(region), 0),
+    () =>
+      corrections
+        .filter((item) => item.kind === 'subtract')
+        .reduce((sum, region) => sum + areaFromRect(region) * correctionCount(region), 0),
     [corrections]
   )
   const pxPerSquareMeter = scale ? scale.pixelsPerMeter ** 2 : null
   const acceptedDetectionArea = pxPerSquareMeter ? acceptedDetectionAreaPx / pxPerSquareMeter : 0
   const addedCorrectionArea = pxPerSquareMeter ? addedCorrectionAreaPx / pxPerSquareMeter : 0
   const subtractedCorrectionArea = pxPerSquareMeter ? subtractedCorrectionAreaPx / pxPerSquareMeter : 0
+
+  const deductions = useMemo(
+    () =>
+      corrections
+        .filter((item) => item.kind === 'subtract' && (item.deduction_type === 'window' || item.deduction_type === 'door'))
+        .map((item) => ({
+          type: item.deduction_type,
+          count: correctionCount(item),
+          unit_area_m2: Number(item.area_m2 || 0),
+          line_total_m2: correctionLineTotalM2(item),
+        })),
+    [corrections]
+  )
 
   const quantity = buildQuantityResult({
     acceptedDetectionAreaM2: acceptedDetectionArea,
@@ -132,16 +153,19 @@ export default function PlanViewer({ file_id, page_image_url, backendBase = 'htt
     confirmedHeightM: Number(heightMeters || 0),
   })
 
-  const workflow = [
-    ['Plan', true],
-    ['Scale', Boolean(scale)],
-    ['Legend', Boolean(hatchSample)],
-    ['Detection', rawDetections.length > 0],
-    ['Review', Boolean(reviewSummary)],
-    ['Height', heightConfirmed],
-    ['Quantity', heightConfirmed && quantity.final_area_m2 > 0],
-    ['Export', heightConfirmed && quantity.volume_m3 > 0],
+  const detectionReviewReady = showReview || Boolean(reviewSummary)
+
+  const stepDefs = [
+    { label: 'Upload & Scale', unlocked: true },
+    { label: 'Select Component', unlocked: Boolean(scale) },
+    { label: 'Review Quantity', unlocked: detectionReviewReady },
+    { label: 'Export', unlocked: heightConfirmed && quantity.volume_m3 > 0 },
   ]
+
+  const goToStep = (index) => {
+    if (!stepDefs[index]?.unlocked) return
+    setActiveStep(index)
+  }
 
   const setSelectionModeSafe = (mode) => {
     selectionModeRef.current = mode
@@ -162,7 +186,13 @@ export default function PlanViewer({ file_id, page_image_url, backendBase = 'htt
       bbox: { x: rect.x, y: rect.y, width: rect.w, height: rect.h },
       area_pixels,
       area_m2,
+      deduction_type: null,
+      count: 1,
     }
+  }
+
+  const updateCorrectionDeduction = (id, patch) => {
+    setCorrections((prev) => prev.map((item) => (item.id === id ? { ...item, ...patch } : item)))
   }
 
   const handleImageLoad = (event) => {
@@ -315,14 +345,30 @@ export default function PlanViewer({ file_id, page_image_url, backendBase = 'htt
       </div>
 
       <div className="workflow-grid" style={{ marginBottom: 20 }}>
-        {workflow.map(([label, done], index) => (
-          <div key={label} className="workflow-step">
-            <strong>{index + 1}. {label}</strong>
-            <div className={`status-pill ${done ? 'status-completed' : ''}`}>
-              {done ? 'Completed' : index === 1 ? 'In progress' : 'Not started'}
-            </div>
-          </div>
-        ))}
+        {stepDefs.map((step, index) => {
+          const isActive = activeStep === index
+          const isDone = index < activeStep || (index === activeStep && stepDefs[index + 1]?.unlocked)
+          return (
+            <button
+              key={step.label}
+              type="button"
+              className="workflow-step"
+              disabled={!step.unlocked}
+              aria-current={isActive ? 'step' : undefined}
+              onClick={() => goToStep(index)}
+              style={{
+                textAlign: 'left',
+                cursor: step.unlocked ? 'pointer' : 'not-allowed',
+                borderColor: isActive ? 'var(--color-accent)' : undefined,
+              }}
+            >
+              <strong>{index + 1}. {step.label}</strong>
+              <div className={`status-pill ${isDone ? 'status-completed' : ''}`}>
+                {isDone ? 'Completed' : isActive ? 'Active' : step.unlocked ? 'Ready' : 'Locked'}
+              </div>
+            </button>
+          )
+        })}
       </div>
 
       <div className="two-col">
@@ -361,100 +407,127 @@ export default function PlanViewer({ file_id, page_image_url, backendBase = 'htt
         </div>
 
         <div>
-          <div className="card panel" style={{ marginBottom: 16 }}>
-            <h3>Confirm Plan Scale</h3>
-            <div className="field">
-              <label>Measured pixel distance</label>
-              <input type="number" value={pixelDistance} onChange={(event) => setPixelDistance(event.target.value)} />
+          {activeStep === 0 && (
+            <div className="card panel" style={{ marginBottom: 16 }}>
+              <h3>Confirm Plan Scale</h3>
+              <div className="field">
+                <label>Measured pixel distance</label>
+                <input type="number" value={pixelDistance} onChange={(event) => setPixelDistance(event.target.value)} />
+              </div>
+              <div className="field">
+                <label>Real distance (m)</label>
+                <input type="number" value={realDistance} onChange={(event) => setRealDistance(event.target.value)} />
+              </div>
+              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                <button className="btn" onClick={() => setScale({ pixelsPerMeter: Number(pixelDistance) / Number(realDistance || 1) })}>Confirm Plan Scale</button>
+                <button className="btn btn-secondary" onClick={() => setScale(null)}>Reset Scale</button>
+              </div>
+              <p className="muted">Scale status: <strong>{scale ? 'Confirmed' : 'Not confirmed'}</strong></p>
+              {scale && <p className="muted">Confirmed scale value: {round(scale.pixelsPerMeter, 2)} px/m</p>}
+              <button className="btn" style={{ marginTop: 12 }} disabled={!scale} onClick={() => setActiveStep(1)}>
+                Continue to Select Component
+              </button>
             </div>
-            <div className="field">
-              <label>Real distance (m)</label>
-              <input type="number" value={realDistance} onChange={(event) => setRealDistance(event.target.value)} />
-            </div>
-            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-              <button className="btn" onClick={() => setScale({ pixelsPerMeter: Number(pixelDistance) / Number(realDistance || 1) })}>Confirm Plan Scale</button>
-              <button className="btn btn-secondary" onClick={() => setScale(null)}>Reset Scale</button>
-            </div>
-            <p className="muted">Scale status: <strong>{scale ? 'Confirmed' : 'Not confirmed'}</strong></p>
-            {scale && <p className="muted">Confirmed scale value: {round(scale.pixelsPerMeter, 2)} px/m</p>}
-          </div>
+          )}
 
-          <div className="card panel">
-            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-              <button className="btn" disabled={!scale} onClick={() => setShowLegendAssistant((value) => !value)}>
-                {showLegendAssistant ? 'Hide Legend Assistant' : 'Open Legend Assistant'}
-              </button>
-              <button className="btn btn-secondary" disabled={!canAutoDetect} onClick={() => setShowDetection((value) => !value)}>
-                {showDetection ? 'Hide Detection' : 'Open Detection'}
-              </button>
-              <button className="btn btn-secondary" disabled={rawDetections.length === 0} onClick={() => setShowReview((value) => !value)}>
-                {showReview ? 'Hide Review' : 'Open Review'}
+          {activeStep === 1 && (
+            <div className="card panel">
+              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                <button className="btn" disabled={!scale} onClick={() => setShowLegendAssistant((value) => !value)}>
+                  {showLegendAssistant ? 'Hide Legend Assistant' : 'Open Legend Assistant'}
+                </button>
+                <button className="btn btn-secondary" disabled={!canAutoDetect} onClick={() => setShowDetection((value) => !value)}>
+                  {showDetection ? 'Hide Detection' : 'Open Detection'}
+                </button>
+              </div>
+              {scale && !canAutoDetect && (
+                <p className="muted" style={{ marginTop: 8, fontSize: 13 }}>
+                  Confirm a hatch sample in Legend Assistant to enable detection.
+                </p>
+              )}
+              {canAutoDetect && rawDetections.length === 0 && (
+                <p className="muted" style={{ marginTop: 8, fontSize: 13 }}>
+                  Run detection to enable review.
+                </p>
+              )}
+              {showLegendAssistant && (
+                <div style={{ marginTop: 16 }}>
+                  <LegendAssistantPanel
+                    fileId={file_id}
+                    componentName={componentName}
+                    legendBox={legendBox}
+                    hatchBox={hatchBox}
+                    hatchSample={hatchSample}
+                    hatchClickMode={selectionMode === 'hatch_click'}
+                    canConfirmHatchSample={canConfirmHatchSample}
+                    hatchPreviewUrl={hatchPreviewUrl}
+                    debug={{
+                      selectionMode: selectionMode || 'null',
+                      legendBox: legendBox ? JSON.stringify(legendBox) : 'null',
+                      hatchBox: hatchBox ? JSON.stringify(hatchBox) : 'null',
+                      backendHatchSampleId: hatchSample?.hatch_sample_id || 'null',
+                      canConfirmHatchSample,
+                      canAutoDetect,
+                    }}
+                    vlmNotes="VLM can suggest context only. Final sample selection stays user-confirmed."
+                    onStartLegendSelection={() => setSelectionModeSafe('legend')}
+                    onStartHatchSelection={() => setSelectionModeSafe('hatch')}
+                    onStartHatchClickSelection={() => setSelectionModeSafe('hatch_click')}
+                    onAdjustHatchBox={adjustHatchBox}
+                    onHatchSampleSaved={(sample) => {
+                      setHatchSample(sample)
+                      setPlanNotes('Backend Sample Saved')
+                    }}
+                    onClose={() => setShowLegendAssistant(false)}
+                  />
+                </div>
+              )}
+              {showDetection && (
+                <div style={{ marginTop: 16 }}>
+                  <HatchDetectionPanel
+                    fileId={file_id}
+                    componentName={componentName}
+                    hatchSample={hatchSample}
+                    scale={scale}
+                    detectionCount={rawDetections.length}
+                    onDetectionComplete={(detections) => {
+                      setRawDetections(detections)
+                      setAcceptedDetections(detections)
+                      setReviewSummary(null)
+                      setShowReview(true)
+                    }}
+                    onClose={() => setShowDetection(false)}
+                  />
+                </div>
+              )}
+              <button className="btn" style={{ marginTop: 16 }} disabled={!detectionReviewReady} onClick={() => setActiveStep(2)}>
+                Continue to Review Quantity
               </button>
             </div>
-            {showLegendAssistant && (
-              <div style={{ marginTop: 16 }}>
-                <LegendAssistantPanel
-                  fileId={file_id}
-                  componentName={componentName}
-                  legendBox={legendBox}
-                  hatchBox={hatchBox}
-                  hatchSample={hatchSample}
-                  hatchClickMode={selectionMode === 'hatch_click'}
-                  canConfirmHatchSample={canConfirmHatchSample}
-                  hatchPreviewUrl={hatchPreviewUrl}
-                  debug={{
-                    selectionMode: selectionMode || 'null',
-                    legendBox: legendBox ? JSON.stringify(legendBox) : 'null',
-                    hatchBox: hatchBox ? JSON.stringify(hatchBox) : 'null',
-                    backendHatchSampleId: hatchSample?.hatch_sample_id || 'null',
-                    canConfirmHatchSample,
-                    canAutoDetect,
-                  }}
-                  vlmNotes="VLM can suggest context only. Final sample selection stays user-confirmed."
-                  onStartLegendSelection={() => setSelectionModeSafe('legend')}
-                  onStartHatchSelection={() => setSelectionModeSafe('hatch')}
-                  onStartHatchClickSelection={() => setSelectionModeSafe('hatch_click')}
-                  onAdjustHatchBox={adjustHatchBox}
-                  onHatchSampleSaved={(sample) => {
-                    setHatchSample(sample)
-                    setPlanNotes('Backend Sample Saved')
-                  }}
-                  onClose={() => setShowLegendAssistant(false)}
-                />
-              </div>
-            )}
-            {showDetection && (
-              <div style={{ marginTop: 16 }}>
-                <HatchDetectionPanel
-                  fileId={file_id}
-                  componentName={componentName}
-                  hatchSample={hatchSample}
-                  scale={scale}
-                  detectionCount={rawDetections.length}
-                  onDetectionComplete={(detections) => {
-                    setRawDetections(detections)
-                    setAcceptedDetections(detections)
-                    setReviewSummary(null)
-                    setShowReview(true)
-                  }}
-                  onClose={() => setShowDetection(false)}
-                />
-              </div>
-            )}
-            {showReview && (
-              <div style={{ marginTop: 16 }}>
-                <DetectionReviewPanel detections={rawDetections} onConfirm={({ acceptedDetections, summary }) => {
-                  setAcceptedDetections(acceptedDetections)
-                  setReviewSummary({ ...summary, component: componentName })
-                  setShowReview(false)
-                }} onClose={() => setShowReview(false)} />
-              </div>
-            )}
-          </div>
+          )}
         </div>
       </div>
 
-      {reviewSummary && (
+      {activeStep === 2 && (
+        <div className="card panel" style={{ marginTop: 16 }}>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            <button className="btn btn-secondary" disabled={rawDetections.length === 0} onClick={() => setShowReview((value) => !value)}>
+              {showReview ? 'Hide Review' : 'Open Review'}
+            </button>
+          </div>
+          {showReview && (
+            <div style={{ marginTop: 16 }}>
+              <DetectionReviewPanel detections={rawDetections} onConfirm={({ acceptedDetections, summary }) => {
+                setAcceptedDetections(acceptedDetections)
+                setReviewSummary({ ...summary, component: componentName })
+                setShowReview(false)
+              }} onClose={() => setShowReview(false)} />
+            </div>
+          )}
+        </div>
+      )}
+
+      {activeStep === 2 && reviewSummary && (
         <div className="card panel" style={{ marginTop: 16 }}>
           <h3>Reviewed Detection Areas</h3>
           <p className="muted">Accepted detections: <strong>{reviewSummary.accepted}</strong> | Rejected: <strong>{reviewSummary.rejected}</strong> | Deleted: <strong>{reviewSummary.deleted}</strong></p>
@@ -471,6 +544,7 @@ export default function PlanViewer({ file_id, page_image_url, backendBase = 'htt
                 onStartAdd={() => setSelectionModeSafe('correction_add')}
                 onStartSubtract={() => setSelectionModeSafe('correction_subtract')}
                 onRemoveCorrection={(id) => setCorrections((prev) => prev.filter((item) => item.id !== id))}
+                onTagDeduction={updateCorrectionDeduction}
                 onClose={() => setShowRegionEditor(false)}
               />
             </div>
@@ -478,7 +552,7 @@ export default function PlanViewer({ file_id, page_image_url, backendBase = 'htt
         </div>
       )}
 
-      {reviewSummary && (
+      {activeStep === 2 && reviewSummary && (
         <div className="card panel" style={{ marginTop: 16 }}>
           <h3>Height Assistant</h3>
           <p className="muted">VLM/AI can suggest height context only. Final m3 stays blocked until user confirms height.</p>
@@ -502,38 +576,60 @@ export default function PlanViewer({ file_id, page_image_url, backendBase = 'htt
         </div>
       )}
 
-      {heightConfirmed && quantity.final_area_m2 > 0 && (
+      {activeStep === 2 && heightConfirmed && quantity.final_area_m2 > 0 && (
         <div className="card panel" style={{ marginTop: 16 }}>
           <h3>Calculate Quantity</h3>
-          <p className="muted">Formula: final_area_m2 = accepted_detection_area_m2 + added_correction_area_m2 - subtracted_correction_area_m2; volume_m3 = final_area_m2 x confirmed_height_m.</p>
           <table style={{ width: '100%' }}>
             <tbody>
               <tr><td><strong>Component</strong></td><td>{componentName}</td></tr>
               <tr><td><strong>Accepted detections</strong></td><td>{reviewSummary?.accepted || 0}</td></tr>
-              <tr><td><strong>accepted_detection_area_m2</strong></td><td>{round(acceptedDetectionArea, 4)}</td></tr>
-              <tr><td><strong>added_correction_area_m2</strong></td><td>{round(addedCorrectionArea, 4)}</td></tr>
-              <tr><td><strong>subtracted_correction_area_m2</strong></td><td>{round(subtractedCorrectionArea, 4)}</td></tr>
-              <tr><td><strong>final_area_m2</strong></td><td>{round(quantity.final_area_m2, 4)}</td></tr>
-              <tr><td><strong>Height</strong></td><td>{round(heightMeters, 3)} m</td></tr>
-              <tr><td><strong>volume_m3</strong></td><td>{round(quantity.volume_m3, 4)} m3</td></tr>
+              <tr><td><strong>Final area (m²)</strong></td><td>{round(quantity.final_area_m2, 4)}</td></tr>
+              <tr><td><strong>Height (m)</strong></td><td>{round(heightMeters, 3)}</td></tr>
+              <tr><td><strong>Volume (m³)</strong></td><td>{round(quantity.volume_m3, 4)}</td></tr>
             </tbody>
           </table>
-          <div style={{ marginTop: 12 }}>
-            <ExportButton
-              projectName={projectName}
-              planName={file_id}
-              componentName={componentName}
-              areaM2={quantity.final_area_m2}
-              acceptedDetectionAreaM2={acceptedDetectionArea}
-              addedCorrectionAreaM2={addedCorrectionArea}
-              subtractedCorrectionAreaM2={subtractedCorrectionArea}
-              heightM={heightMeters}
-              volumeM3={quantity.volume_m3}
-              detectionMethod="Backend hatch detection with user review and correction polygons"
-              reviewStatus="Completed"
-              notes={`Legend sample confirmed for ${componentName}. Accepted ${reviewSummary?.accepted || 0} backend detection(s).`}
-            />
-          </div>
+          <details className="advanced-details" style={{ marginTop: 12 }}>
+            <summary>Advanced details</summary>
+            <p className="muted" style={{ marginTop: 8 }}>
+              final_area_m2 = accepted_detection_area_m2 + added_correction_area_m2 - subtracted_correction_area_m2; volume_m3 = final_area_m2 x confirmed_height_m
+            </p>
+            <table style={{ width: '100%', marginTop: 8 }}>
+              <tbody>
+                <tr><td><strong>accepted_detection_area_m2</strong></td><td>{round(acceptedDetectionArea, 4)}</td></tr>
+                <tr><td><strong>added_correction_area_m2</strong></td><td>{round(addedCorrectionArea, 4)}</td></tr>
+                <tr><td><strong>subtracted_correction_area_m2</strong></td><td>{round(subtractedCorrectionArea, 4)}</td></tr>
+                <tr><td><strong>final_area_m2</strong></td><td>{round(quantity.final_area_m2, 4)}</td></tr>
+                <tr><td><strong>volume_m3</strong></td><td>{round(quantity.volume_m3, 4)}</td></tr>
+              </tbody>
+            </table>
+          </details>
+          <button className="btn" style={{ marginTop: 12 }} disabled={!(heightConfirmed && quantity.volume_m3 > 0)} onClick={() => setActiveStep(3)}>
+            Continue to Export
+          </button>
+        </div>
+      )}
+
+      {activeStep === 3 && heightConfirmed && quantity.volume_m3 > 0 && (
+        <div className="card panel" style={{ marginTop: 16 }}>
+          <h3>Export</h3>
+          <p className="muted">
+            Final area {round(quantity.final_area_m2, 4)} m², height {round(heightMeters, 3)} m, volume {round(quantity.volume_m3, 4)} m³.
+          </p>
+          <ExportButton
+            projectName={projectName}
+            planName={file_id}
+            componentName={componentName}
+            areaM2={quantity.final_area_m2}
+            acceptedDetectionAreaM2={acceptedDetectionArea}
+            addedCorrectionAreaM2={addedCorrectionArea}
+            subtractedCorrectionAreaM2={subtractedCorrectionArea}
+            heightM={heightMeters}
+            volumeM3={quantity.volume_m3}
+            deductions={deductions}
+            detectionMethod="Backend hatch detection with user review and correction polygons"
+            reviewStatus="Completed"
+            notes={`Legend sample confirmed for ${componentName}. Accepted ${reviewSummary?.accepted || 0} backend detection(s).`}
+          />
         </div>
       )}
     </div>

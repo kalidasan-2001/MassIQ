@@ -5,13 +5,8 @@ export default function SectionHeightPanel({ onConfirmHeight, onClose }) {
 
   return (
     <div className="card panel">
-      <h3>Height Assistant</h3>
-      <p className="muted">
-        Confirm the final height or thickness in meters. Automatic section reading can be added
-        later without changing the business workflow.
-      </p>
       <div className="field">
-        <label>Confirmed height / thickness (m)</label>
+        <label>Assistant suggested height (m)</label>
         <input value={height} onChange={(event) => setHeight(event.target.value)} type="number" step="0.001" />
       </div>
       <button

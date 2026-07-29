@@ -6,6 +6,19 @@ import cv2
 import numpy as np
 
 
+def _passes_size_quality_filter(width: int, height: int, confidence: float, min_region_size: int) -> bool:
+    """Per-candidate noise gate.
+
+    Every match from matchTemplate shares the same template width/height, so a
+    plain width*height comparison is constant across all candidates. Weighting
+    the area by that candidate's own confidence makes weak matches count as
+    effectively smaller than strong matches of the same template size, so the
+    filter actually varies per detection.
+    """
+    effective_area = width * height * max(0.0, confidence)
+    return effective_area >= int(min_region_size)
+
+
 def detect_hatch_regions(
     page_image_path: str | Path,
     hatch_sample_path: str | Path,
@@ -29,8 +42,8 @@ def detect_hatch_regions(
     sample_h, sample_w = sample.shape[:2]
 
     for index, (x, y) in enumerate(zip(xs.tolist(), ys.tolist()), start=1):
-        area = sample_w * sample_h
-        if remove_small_noise and area < int(min_region_size):
+        confidence = float(result[y, x])
+        if remove_small_noise and not _passes_size_quality_filter(sample_w, sample_h, confidence, min_region_size):
             continue
         detections.append(
             {
@@ -39,7 +52,7 @@ def detect_hatch_regions(
                 "y": int(y),
                 "w": int(sample_w),
                 "h": int(sample_h),
-                "confidence": round(float(result[y, x]), 4),
+                "confidence": round(confidence, 4),
                 "selected": True,
                 "status": "accepted",
             }

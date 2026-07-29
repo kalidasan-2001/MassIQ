@@ -70,6 +70,7 @@ async function run() {
 
     await page.getByRole('button', { name: 'Confirm Plan Scale' }).click()
     await expectVisible(page.getByText('Confirmed scale value:'))
+    await page.getByRole('button', { name: 'Continue to Select Component' }).click()
 
     await page.getByRole('button', { name: 'Open Legend Assistant' }).click()
     await expectVisible(page.getByRole('heading', { name: 'Legend Assistant' }))
@@ -97,6 +98,7 @@ async function run() {
     await page.getByRole('button', { name: 'Confirm Hatch Sample' }).click()
     const saveResp = await savePromise
     assert(saveResp.ok(), 'save-hatch-sample failed')
+    await page.getByText('Advanced details').click()
     await expectVisible(page.getByText(/backendHatchSampleId=(?!null)/i))
     await expectVisible(page.getByText(/canAutoDetect=true/i))
 
@@ -115,24 +117,25 @@ async function run() {
     assert(hasDetections || noDetections, 'Neither detections nor clean no-detections message shown')
 
     const detectionOverlaysCount = await page.locator('.overlay-accepted').count()
-    let acceptRejectStatus = 'partial'
-    if (hasDetections) {
-      await expectVisible(page.getByRole('heading', { name: 'Review Detected Component Areas' }))
-      const rows = page.locator('.workflow-step').filter({ hasText: /det_|det-/ })
-      const count = await rows.count()
-      if (count > 0) {
-        await rows.nth(0).getByRole('button', { name: 'accepted' }).click()
-      }
-      if (count > 1) {
-        await rows.nth(1).getByRole('button', { name: 'rejected' }).click()
-      }
-      await page.getByRole('button', { name: 'Confirm Review' }).click()
-      acceptRejectStatus = count > 1 ? 'pass' : 'partial'
-    }
 
-    if (!hasDetections) {
-      await page.getByRole('button', { name: 'Open Review' }).click().catch(() => {})
+    // Detection review now lives in the "Review Quantity" wizard step -- navigate there.
+    // The review panel is already open (onDetectionComplete sets showReview=true
+    // regardless of result count), so no separate "Open Review" click is needed.
+    await page.getByRole('button', { name: 'Continue to Review Quantity' }).click()
+    await expectVisible(page.getByRole('heading', { name: 'Review Detected Component Areas' }))
+
+    const rows = page.locator('.workflow-step').filter({ hasText: /det_|det-/ })
+    const count = await rows.count()
+    if (count > 0) {
+      await rows.nth(0).getByRole('button', { name: 'accepted' }).click()
     }
+    if (count > 1) {
+      await rows.nth(1).getByRole('button', { name: 'rejected' }).click()
+    }
+    // Confirm Review unconditionally so reviewSummary is set even with zero
+    // detections -- this is what keeps the manual-correction fallback path reachable.
+    await page.getByRole('button', { name: 'Confirm Review' }).click()
+    const acceptRejectStatus = count > 1 ? 'pass' : (count > 0 ? 'partial' : 'zero-detections')
 
     // Corrections path (works regardless of detection quality)
     await page.getByRole('button', { name: 'Open Correction Tool' }).click()
@@ -172,6 +175,8 @@ async function run() {
     await page.locator('input[type=\"number\"]').last().fill('0.30')
     await page.getByRole('button', { name: 'Confirm Height' }).click()
     await expectVisible(page.getByRole('heading', { name: 'Calculate Quantity' }))
+    // The formula/raw breakdown now lives behind "Advanced details" -- open it before reading.
+    await page.locator('.advanced-details summary', { hasText: 'Advanced details' }).click()
     const finalText = await page.locator('body').innerText()
     assert(finalText.includes('accepted_detection_area_m2'), 'accepted detection area missing from final table')
     assert(finalText.includes('added_correction_area_m2'), 'added correction area missing from final table')
@@ -180,6 +185,9 @@ async function run() {
     assert(finalText.includes('volume_m3'), 'final volume missing from final table')
     assert(finalText.includes('final_area_m2 = accepted_detection_area_m2 + added_correction_area_m2 - subtracted_correction_area_m2'), 'formula text missing')
     assert(finalText.includes('volume_m3 = final_area_m2 x confirmed_height_m'), 'volume formula text missing')
+
+    await page.getByRole('button', { name: 'Continue to Export' }).click()
+    await expectVisible(page.getByRole('heading', { name: 'Export' }))
 
     const downloadPromise = page.waitForEvent('download')
     await page.getByRole('button', { name: 'Export Quantity Report' }).click()

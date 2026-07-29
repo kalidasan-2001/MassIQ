@@ -15,6 +15,7 @@ export default function HatchDetectionPanel({
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
+  const hasHatchSample = Boolean(hatchSample?.hatch_sample_id)
 
   const normalizeDetections = (detections) => {
     const pixelsPerMeter = Number(scale?.pixelsPerMeter || 0)
@@ -117,13 +118,18 @@ export default function HatchDetectionPanel({
         />
       </div>
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-        <button className="btn" disabled={loading} onClick={runDetection}>
+        <button className="btn" disabled={loading || !hasHatchSample} onClick={runDetection}>
           {loading ? 'Searching for matching component areas...' : 'Auto Detect Selected Component'}
         </button>
         <button className="btn btn-secondary" onClick={onClose}>
           Close
         </button>
       </div>
+      {!hasHatchSample && (
+        <p className="muted" style={{ marginTop: 8 }}>
+          Confirm a hatch sample in Legend Assistant to enable detection.
+        </p>
+      )}
       <p className="muted" style={{ marginTop: 12 }}>
         Current reviewed detection count: <strong>{detectionCount}</strong>
       </p>

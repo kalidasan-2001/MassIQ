@@ -4,11 +4,18 @@ from io import BytesIO
 
 from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.services.excel_service import build_excel_report
 
 router = APIRouter(tags=["export"])
+
+
+class DeductionLineItem(BaseModel):
+    type: str
+    count: int = Field(default=1, ge=1)
+    unit_area_m2: float
+    line_total_m2: float
 
 
 class ExportPayload(BaseModel):
@@ -29,6 +36,7 @@ class ExportPayload(BaseModel):
     subtracted_correction_area_m2: float | None = 0
     height_m: float
     volume_m3: float
+    deductions: list[DeductionLineItem] | None = None
     notes: str | None = None
     review_status: str | None = None
 

@@ -5,7 +5,11 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from app.services.vlm_service import analyze_floor_plan_with_vlm, analyze_section_with_vlm
+from app.services.vlm_service import (
+    analyze_floor_plan_with_vlm,
+    analyze_section_with_vlm,
+    suggest_legend_hatch_candidates,
+)
 
 router = APIRouter(prefix="/vlm", tags=["vlm"])
 BASE_DIR = Path(__file__).resolve().parents[1]
@@ -19,6 +23,11 @@ class FloorPlanRequest(BaseModel):
 class SectionRequest(BaseModel):
     section_file_id: str
     component_name: str = "Stahlbeton C25/30"
+
+
+class LegendHatchSuggestionRequest(BaseModel):
+    file_id: str
+    component_query: str = "Stahlbeton C25/30"
 
 
 @router.post("/analyze-floor-plan")
@@ -35,3 +44,11 @@ async def analyze_section_view(payload: SectionRequest):
     if not image_path.exists():
         raise HTTPException(status_code=404, detail="Rendered section image not found")
     return analyze_section_with_vlm(str(image_path), payload.component_name)
+
+
+@router.post("/suggest-legend-hatch")
+async def suggest_legend_hatch(payload: LegendHatchSuggestionRequest):
+    image_path = RENDERED_DIR / f"{payload.file_id}.png"
+    if not image_path.exists():
+        raise HTTPException(status_code=404, detail="Rendered floor plan image not found")
+    return suggest_legend_hatch_candidates(str(image_path), payload.component_query)
