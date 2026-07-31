@@ -58,6 +58,7 @@ def analyze_floor_plan_with_vlm(image_path: str) -> dict:
     client = OpenAI(api_key=api_key)
     response = client.responses.create(
         model=os.getenv("OPENAI_VLM_MODEL", "gpt-4.1-mini"),
+        temperature=0,
         input=[
             {
                 "role": "user",
@@ -199,6 +200,7 @@ def suggest_legend_hatch_candidates(image_path: str | Path, component_query: str
         client = OpenAI(api_key=api_key)
         response = client.responses.create(
             model=os.getenv("OPENAI_VLM_MODEL", "gpt-4.1-mini"),
+            temperature=0,
             input=[
                 {
                     "role": "user",
@@ -272,6 +274,7 @@ def analyze_section_with_vlm(image_path: str, component_name: str) -> dict:
     client = OpenAI(api_key=api_key)
     response = client.responses.create(
         model=os.getenv("OPENAI_VLM_MODEL", "gpt-4.1-mini"),
+        temperature=0,
         input=[
             {
                 "role": "user",

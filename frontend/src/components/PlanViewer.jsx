@@ -12,6 +12,8 @@ const CLICK_SAMPLE_SIZE = 40
 const CLICK_CORRECTION_SIZE = 80
 const MIN_SAMPLE_SIZE = 5
 const MOVE_STEP = 8
+const ACCURACY_DISCLAIMER =
+  'MassIQ accelerates quantity takeoff and supports your review. It does not guarantee accuracy — confirm all quantities before use.'
 
 const round = (value, decimals = 2) => {
   if (value === null || value === undefined || Number.isNaN(Number(value))) return '-'
@@ -588,6 +590,7 @@ export default function PlanViewer({ file_id, page_image_url, backendBase = 'htt
               <tr><td><strong>Volume (m³)</strong></td><td>{round(quantity.volume_m3, 4)}</td></tr>
             </tbody>
           </table>
+          <p className="muted" style={{ marginTop: 8, fontSize: 13 }}>{ACCURACY_DISCLAIMER}</p>
           <details className="advanced-details" style={{ marginTop: 12 }}>
             <summary>Advanced details</summary>
             <p className="muted" style={{ marginTop: 8 }}>
@@ -615,6 +618,7 @@ export default function PlanViewer({ file_id, page_image_url, backendBase = 'htt
           <p className="muted">
             Final area {round(quantity.final_area_m2, 4)} m², height {round(heightMeters, 3)} m, volume {round(quantity.volume_m3, 4)} m³.
           </p>
+          <p className="muted" style={{ marginTop: 4, fontSize: 13 }}>{ACCURACY_DISCLAIMER}</p>
           <ExportButton
             projectName={projectName}
             planName={file_id}

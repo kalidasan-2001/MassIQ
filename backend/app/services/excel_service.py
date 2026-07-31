@@ -4,6 +4,11 @@ from io import BytesIO
 
 from openpyxl import Workbook
 
+DISCLAIMER_TEXT = (
+    "MassIQ accelerates quantity takeoff and supports your review. "
+    "It does not guarantee accuracy — confirm all quantities before use."
+)
+
 
 def build_excel_report(payload: dict) -> bytes:
     wb = Workbook()
@@ -22,6 +27,7 @@ def build_excel_report(payload: dict) -> bytes:
         ("Volume (m3)", payload.get("volume_m3", 0)),
         ("Review Status", payload.get("review_status", "")),
         ("Notes", payload.get("notes", "")),
+        ("Disclaimer", DISCLAIMER_TEXT),
     ]
     row_index = 0
     for row_index, (label, value) in enumerate(rows, start=1):

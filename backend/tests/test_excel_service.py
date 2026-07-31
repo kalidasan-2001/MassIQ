@@ -11,7 +11,7 @@ BACKEND_DIR = Path(__file__).resolve().parents[1]
 if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
-from app.services.excel_service import build_excel_report
+from app.services.excel_service import DISCLAIMER_TEXT, build_excel_report
 
 _BASE_PAYLOAD = {
     "project_name": "Test Project",
@@ -29,7 +29,7 @@ _BASE_PAYLOAD = {
 }
 
 # The fixed label rows written unconditionally by build_excel_report today.
-_BASE_ROW_COUNT = 12
+_BASE_ROW_COUNT = 13
 
 
 class BuildExcelReportRegressionTests(unittest.TestCase):
@@ -51,6 +51,12 @@ class BuildExcelReportRegressionTests(unittest.TestCase):
         ws = self._load(dict(_BASE_PAYLOAD))
         self.assertEqual(ws.cell(row=7, column=1).value, "Subtracted Correction Area (m2)")
         self.assertEqual(ws.cell(row=7, column=2).value, 1.8)
+
+    def test_disclaimer_row_present_with_exact_text(self):
+        ws = self._load(dict(_BASE_PAYLOAD))
+        self.assertEqual(ws.cell(row=_BASE_ROW_COUNT, column=1).value, "Disclaimer")
+        self.assertEqual(ws.cell(row=_BASE_ROW_COUNT, column=2).value, DISCLAIMER_TEXT)
+        self.assertIn("does not guarantee accuracy", DISCLAIMER_TEXT)
 
 
 class BuildExcelReportDeductionRowsTests(unittest.TestCase):
