@@ -30,6 +30,9 @@ backend/app/storage/
 backend/storage/
 *.pdf
 
+# Local scratch / diagnostic output
+test_plans/
+
 # Backups / legacy folders
 _backup_before_flatten/
 _recovery_candidates/

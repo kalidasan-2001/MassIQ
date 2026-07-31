@@ -3,9 +3,12 @@ from __future__ import annotations
 import uuid
 from pathlib import Path
 
+from dotenv import load_dotenv
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
+
+load_dotenv()
 
 from app.routes import detection, export, vlm
 from app.services.measurement_service import analyze_section_dimensions
