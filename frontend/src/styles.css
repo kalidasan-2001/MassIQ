@@ -267,6 +267,19 @@ b {
   background: rgba(15, 23, 42, 0.08);
 }
 
+/* R3: pattern/description selection overlays, same visual language as the
+   legacy hatch/legend overlays above (border + tinted fill), just two more
+   distinguishable colors for the Legend workflow's two selections. */
+.overlay-pattern {
+  border-color: var(--color-overlay-hatch);
+  background: rgba(217, 119, 6, 0.16);
+}
+
+.overlay-description {
+  border-color: var(--color-overlay-legend);
+  background: rgba(37, 99, 235, 0.12);
+}
+
 .advanced-details summary {
   cursor: pointer;
   color: var(--color-text-muted);

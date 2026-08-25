@@ -1,5 +1,6 @@
 import React from 'react'
 import UploadPanel from './components/UploadPanel'
+import LegendFeaturePage from './features/legend/LegendFeaturePage'
 
 export default function App() {
   return (
@@ -16,6 +17,9 @@ export default function App() {
       </header>
       <main className="main-content">
         <UploadPanel />
+        {/* R3: additive only -- the persisted Project/Plan/Legend workflow
+            lives entirely separately from the legacy MVP flow above. */}
+        <LegendFeaturePage />
       </main>
     </div>
   )

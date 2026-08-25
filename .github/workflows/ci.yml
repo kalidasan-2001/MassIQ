@@ -1,9 +1,10 @@
 name: CI
 
-# R2.5 hardening: the smallest CI that protects the known-good baseline
-# (114 pre-existing tests + R2.5's new hardening tests, plus the frontend
-# build). No deployment, no Docker image publishing, no lint/type gate yet
-# -- those are separate, later decisions (see
+# Introduced in R2.5 as the smallest CI that protects the known-good
+# baseline; extended in R3 with the new frontend test suite (Vitest +
+# React Testing Library, introduced this release). No deployment, no
+# Docker image publishing, no lint/type gate yet -- those are separate,
+# later decisions (see
 # docs/architecture/PRODUCTION_ROADMAP.md's Production-Engineering section).
 
 on:
@@ -76,6 +77,10 @@ jobs:
       - name: Install frontend dependencies
         working-directory: frontend
         run: npm ci
+
+      - name: Run frontend test suite
+        working-directory: frontend
+        run: npm test
 
       - name: Build frontend
         working-directory: frontend

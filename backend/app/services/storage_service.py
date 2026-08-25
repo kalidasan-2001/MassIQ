@@ -85,6 +85,28 @@ class StorageService:
             raise StorageError(f"Stored preview not found: {reference!r}")
         return path
 
+    def save_legend_crop(self, plan_id: uuid.UUID, legend_entry_id: uuid.UUID, kind: str, content: bytes) -> str:
+        """R3: stores a pattern/description crop under the *new* Plan tree
+        (`plans/<plan_id>/legend/<legend_entry_id>/<kind>.png`), never the
+        legacy `hatch_samples/` directory main.py/routes/detection.py still
+        use for the old MVP flow. `kind` is caller-controlled (always the
+        literal 'pattern' or 'description' from LegendService, never
+        client input), matching save_page_preview's shape exactly."""
+        legend_dir = self._plan_dir(plan_id) / "legend" / str(legend_entry_id)
+        legend_dir.mkdir(parents=True, exist_ok=True)
+        filename = f"{kind}.png"
+        target = legend_dir / filename
+        target.write_bytes(content)
+        relative = f"plans/{plan_id}/legend/{legend_entry_id}/{filename}"
+        self._safe_path(relative)
+        return relative
+
+    def resolve_legend_crop(self, reference: str) -> Path:
+        path = self._safe_path(reference)
+        if not path.exists():
+            raise StorageError(f"Stored legend crop not found: {reference!r}")
+        return path
+
     def delete_plan_assets(self, plan_id: uuid.UUID) -> None:
         """Best-effort cleanup after a failed ingestion. Never raises --
         a cleanup failure must not mask the original ingestion error that
