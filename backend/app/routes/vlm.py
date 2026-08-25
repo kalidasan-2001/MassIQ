@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from pathlib import Path
-
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
@@ -10,10 +8,9 @@ from app.services.vlm_service import (
     analyze_section_with_vlm,
     suggest_legend_hatch_candidates,
 )
+from app.storage_paths import RENDERED_DIR
 
 router = APIRouter(prefix="/vlm", tags=["vlm"])
-BASE_DIR = Path(__file__).resolve().parents[1]
-RENDERED_DIR = BASE_DIR / "storage" / "rendered_pages"
 
 
 class FloorPlanRequest(BaseModel):

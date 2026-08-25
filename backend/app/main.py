@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import uuid
-from pathlib import Path
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, File, HTTPException, UploadFile
@@ -12,17 +11,9 @@ load_dotenv()
 
 from app.routes import detection, export, plans, projects, vlm
 from app.services.measurement_service import analyze_section_dimensions
+from app.services.pdf_inspection_service import InvalidPdfError, open_and_validate
 from app.services.pdf_service import convert_pdf_first_page_to_png, suggest_plan_scale
-
-BASE_DIR = Path(__file__).resolve().parent
-STORAGE_DIR = BASE_DIR / "storage"
-UPLOADS_DIR = STORAGE_DIR / "uploads"
-RENDERED_DIR = STORAGE_DIR / "rendered_pages"
-EXPORTS_DIR = STORAGE_DIR / "exports"
-HATCH_SAMPLES_DIR = STORAGE_DIR / "hatch_samples"
-
-for path in (UPLOADS_DIR, RENDERED_DIR, EXPORTS_DIR, HATCH_SAMPLES_DIR):
-    path.mkdir(parents=True, exist_ok=True)
+from app.storage_paths import EXPORTS_DIR, HATCH_SAMPLES_DIR, RENDERED_DIR, STORAGE_DIR, UPLOADS_DIR  # noqa: F401
 
 app = FastAPI(title="MassIQ MVP Backend")
 app.add_middleware(
@@ -53,9 +44,23 @@ async def health():
 async def upload_pdf(file: UploadFile = File(...)):
     if not file.filename or not file.filename.lower().endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Only PDF uploads are supported")
+    content = await file.read()
+
+    # R2.5 hardening: reuse PdfInspectionService's already-tested validation
+    # (magic-byte check + PyMuPDF open + page-0 readability) instead of a
+    # second validation implementation. Runs against the in-memory bytes
+    # BEFORE anything is written to disk, so a corrupt/empty/fake-PDF upload
+    # is rejected with a clean 4xx and leaves zero trace -- no partial
+    # uploads/*.pdf or rendered_pages/*.png file for a failed upload.
+    try:
+        validation_doc = open_and_validate(content)
+    except InvalidPdfError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    validation_doc.close()
+
     file_id = uuid.uuid4().hex
     pdf_path = UPLOADS_DIR / f"{file_id}.pdf"
-    pdf_path.write_bytes(await file.read())
+    pdf_path.write_bytes(content)
     image_path = RENDERED_DIR / f"{file_id}.png"
     metadata = convert_pdf_first_page_to_png(pdf_path, image_path)
     return {

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from pathlib import Path
 import uuid
 
 from fastapi import APIRouter, HTTPException
@@ -8,12 +7,9 @@ from pydantic import BaseModel
 from PIL import Image
 
 from app.services.hatch_detection import detect_hatch_regions
+from app.storage_paths import HATCH_SAMPLES_DIR, RENDERED_DIR
 
 router = APIRouter(tags=["detection"])
-BASE_DIR = Path(__file__).resolve().parents[1]
-STORAGE_DIR = BASE_DIR / "storage"
-RENDERED_DIR = STORAGE_DIR / "rendered_pages"
-HATCH_SAMPLES_DIR = STORAGE_DIR / "hatch_samples"
 
 
 class DetectionRequest(BaseModel):

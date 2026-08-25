@@ -19,13 +19,24 @@ from app.services.pdf_service import render_page_to_png_bytes
 from app.services.project_service import ProjectNotFoundError
 from app.services.storage_service import StorageService
 
-__all__ = ["PlanService", "PlanNotFoundError", "InvalidPdfError"]
+__all__ = ["PlanService", "PlanNotFoundError", "PlanPageNotFoundError", "InvalidPdfError"]
 
 
 class PlanNotFoundError(Exception):
     def __init__(self, plan_id: uuid.UUID):
         self.plan_id = plan_id
         super().__init__(f"Plan {plan_id} not found")
+
+
+class PlanPageNotFoundError(Exception):
+    """R2.5: raised by get_page when project/plan exist but no PlanPage row
+    has the requested page_number -- distinct from PlanNotFoundError so
+    routes can 404 with an accurate message."""
+
+    def __init__(self, plan_id: uuid.UUID, page_number: int):
+        self.plan_id = plan_id
+        self.page_number = page_number
+        super().__init__(f"Page {page_number} not found for plan {plan_id}")
 
 
 class PlanService:
@@ -130,3 +141,14 @@ class PlanService:
         if plan is None or plan.project_id != project_id:
             raise PlanNotFoundError(plan_id)
         return plan
+
+    def get_page(self, project_id: uuid.UUID, plan_id: uuid.UUID, page_number: int) -> PlanPage:
+        """R2.5: the smallest prerequisite the new Plan pipeline needs before
+        R3 can show a persisted Plan's page on screen. Reuses get_plan for
+        the Project/Plan relationship and project-isolation check -- no
+        separate ownership-verification logic."""
+        plan = self.get_plan(project_id, plan_id)
+        for page in plan.pages:
+            if page.page_number == page_number:
+                return page
+        raise PlanPageNotFoundError(plan_id, page_number)

@@ -51,8 +51,12 @@ class PlanRoutesTests(unittest.TestCase):
         def _override_plan_service() -> PlanService:
             return PlanService(self.session, storage=self.storage)
 
+        def _override_storage_service() -> StorageService:
+            return self.storage
+
         app.dependency_overrides[get_db] = _override_get_db
         app.dependency_overrides[plans_route_module.get_plan_service] = _override_plan_service
+        app.dependency_overrides[plans_route_module.get_storage_service] = _override_storage_service
         self.client = TestClient(app)
 
         project = ProjectService(self.session).create_project(ProjectCreate(name="Route Test Project"))
@@ -61,6 +65,7 @@ class PlanRoutesTests(unittest.TestCase):
     def tearDown(self):
         app.dependency_overrides.pop(get_db, None)
         app.dependency_overrides.pop(plans_route_module.get_plan_service, None)
+        app.dependency_overrides.pop(plans_route_module.get_storage_service, None)
         self.session.close()
         self._tmp.cleanup()
 
@@ -151,6 +156,62 @@ class PlanRoutesTests(unittest.TestCase):
     def test_existing_health_and_root_endpoints_unaffected(self):
         self.assertEqual(self.client.get("/health").status_code, 200)
         self.assertEqual(self.client.get("/").status_code, 200)
+
+    # -- R2.5: preview endpoint -------------------------------------------
+
+    def test_get_plan_page_preview_returns_valid_png(self):
+        created = self._upload("vector.pdf", fx.build_vector_pdf_bytes()).json()
+        response = self.client.get(
+            f"/api/projects/{self.project_id}/plans/{created['id']}/pages/1/preview"
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.headers["content-type"], "image/png")
+        self.assertGreater(len(response.content), 0)
+        self.assertEqual(response.content[:8], b"\x89PNG\r\n\x1a\n")  # real PNG magic bytes, not a stub
+
+    def test_preview_unknown_project_returns_404(self):
+        created = self._upload("vector.pdf", fx.build_vector_pdf_bytes()).json()
+        response = self.client.get(
+            f"/api/projects/{uuid.uuid4()}/plans/{created['id']}/pages/1/preview"
+        )
+        self.assertEqual(response.status_code, 404)
+
+    def test_preview_unknown_plan_returns_404(self):
+        response = self.client.get(
+            f"/api/projects/{self.project_id}/plans/{uuid.uuid4()}/pages/1/preview"
+        )
+        self.assertEqual(response.status_code, 404)
+
+    def test_preview_unknown_page_returns_404(self):
+        created = self._upload("vector.pdf", fx.build_vector_pdf_bytes()).json()  # 1 page only
+        response = self.client.get(
+            f"/api/projects/{self.project_id}/plans/{created['id']}/pages/99/preview"
+        )
+        self.assertEqual(response.status_code, 404)
+
+    def test_preview_cross_project_access_returns_404(self):
+        """A Plan that exists but belongs to a different project must 404,
+        not leak its preview -- same isolation rule already proven for
+        get_plan, exercised here for the preview endpoint specifically."""
+        other_project_id = ProjectService(self.session).create_project(ProjectCreate(name="Other")).id
+        created = self._upload("a.pdf", fx.build_vector_pdf_bytes(), project_id=str(other_project_id)).json()
+        response = self.client.get(
+            f"/api/projects/{self.project_id}/plans/{created['id']}/pages/1/preview"
+        )
+        self.assertEqual(response.status_code, 404)
+
+    def test_preview_response_does_not_leak_filesystem_path(self):
+        """No absolute path or raw storage-root reference should ever reach
+        the client -- only image bytes and a synthetic filename."""
+        created = self._upload("vector.pdf", fx.build_vector_pdf_bytes()).json()
+        response = self.client.get(
+            f"/api/projects/{self.project_id}/plans/{created['id']}/pages/1/preview"
+        )
+        self.assertEqual(response.status_code, 200)
+        disposition = response.headers.get("content-disposition", "")
+        self.assertNotIn(str(self._tmp.name), disposition)
+        self.assertNotIn("plans/", disposition)
+        self.assertIn("page-1.png", disposition)
 
 
 if __name__ == "__main__":
