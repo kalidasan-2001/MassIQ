@@ -1,0 +1,23 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: massiq-postgres
+    environment:
+      POSTGRES_USER: massiq
+      POSTGRES_PASSWORD: massiq
+      POSTGRES_DB: massiq
+    ports:
+      # Host port 5433, not 5432 -- this machine already has an unrelated
+      # Postgres container bound to 5432 for a different project. Container
+      # port stays 5432 internally.
+      - "5433:5432"
+    volumes:
+      - massiq_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U massiq -d massiq"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  massiq_postgres_data:

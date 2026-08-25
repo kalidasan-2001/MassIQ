@@ -12,3 +12,9 @@ python-dotenv
 openai
 reportlab
 rapidocr-onnxruntime
+
+# R1 -- project persistence (see docs/releases/R1_PROJECT_PERSISTENCE_CHECKLIST.md)
+sqlalchemy
+alembic
+psycopg2-binary
+pydantic-settings

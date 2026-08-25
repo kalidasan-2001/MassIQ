@@ -10,7 +10,7 @@ from fastapi.responses import FileResponse
 
 load_dotenv()
 
-from app.routes import detection, export, vlm
+from app.routes import detection, export, plans, projects, vlm
 from app.services.measurement_service import analyze_section_dimensions
 from app.services.pdf_service import convert_pdf_first_page_to_png, suggest_plan_scale
 
@@ -35,6 +35,8 @@ app.add_middleware(
 app.include_router(export.router)
 app.include_router(detection.router)
 app.include_router(vlm.router)
+app.include_router(projects.router)
+app.include_router(plans.router)
 
 
 @app.get("/")

@@ -30,6 +30,25 @@ def convert_pdf_first_page_to_png(pdf_path: str | Path, output_path: str | Path,
         return {"width": image.width, "height": image.height, "page_count": doc.page_count}
 
 
+def render_page_to_png_bytes(doc: fitz.Document, page_index: int, dpi: int, max_width: int) -> bytes:
+    """R2 multi-page renderer -- renders any single page (0-based index, as
+    PyMuPDF itself indexes) of an already-open document to PNG bytes.
+
+    Reuses `_resize_if_needed` so preview quality/sizing matches the old
+    `convert_pdf_first_page_to_png` behavior, but takes `dpi`/`max_width`
+    explicitly (from Settings) rather than hardcoding them, and does not
+    touch `convert_pdf_first_page_to_png` itself -- that function keeps
+    rendering page 0 only, unchanged, for the old /upload-pdf workflow.
+    """
+    page = doc.load_page(page_index)
+    pix = page.get_pixmap(dpi=dpi, alpha=False)
+    image = Image.open(io.BytesIO(pix.tobytes("png"))).convert("RGB")
+    image = _resize_if_needed(image, max_width=max_width)
+    buffer = io.BytesIO()
+    image.save(buffer, format="PNG")
+    return buffer.getvalue()
+
+
 def suggest_plan_scale(image_path: str | Path) -> dict:
     image_path = Path(image_path)
     filename_hint = image_path.stem
