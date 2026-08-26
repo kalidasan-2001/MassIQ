@@ -1,4 +1,5 @@
 import React, { useMemo, useRef, useState } from 'react'
+import api from '../api/api'
 import ExportButton from './ExportButton'
 import HatchDetectionPanel from './HatchDetectionPanel'
 import DetectionReviewPanel from './DetectionReviewPanel'
@@ -66,7 +67,16 @@ const toDisplayRect = (rect, naturalSize, viewSize) => {
   }
 }
 
-export default function PlanViewer({ file_id, page_image_url, backendBase = 'http://127.0.0.1:8010' }) {
+// Was hardcoded to 'http://127.0.0.1:8010', silently ignoring the same
+// VITE_API_BASE_URL/VITE_BACKEND_URL environment configuration every other
+// API call in the app (src/api/api.js) already respects. Harmless as long
+// as the backend genuinely runs on the default port -- which is true for
+// normal local dev, so this went unnoticed until R3.5 ran the app against
+// an isolated E2E backend on a different port and the plan preview image
+// silently failed to load (a real bug an env-portability-blind manual
+// test could never surface). Reusing api.defaults.baseURL keeps this in
+// sync with that single source of truth instead of hardcoding a second one.
+export default function PlanViewer({ file_id, page_image_url, backendBase = api.defaults.baseURL }) {
   const containerRef = useRef(null)
   const selectionModeRef = useRef(null)
   const draftRectRef = useRef(null)
@@ -390,7 +400,23 @@ export default function PlanViewer({ file_id, page_image_url, backendBase = 'htt
             onMouseLeave={endSelection}
             ref={containerRef}
           >
-            <img alt="Uploaded floor plan preview" className="plan-image" src={renderedPageUrl} onLoad={handleImageLoad} />
+            {/* draggable={false}: <img> is draggable by default, which
+                hijacks a mousedown-then-move gesture into a native OS-level
+                image drag after the first mousemove, silently swallowing
+                every further mousemove/mouseup this component's own
+                selection handlers need. Same root cause identified and
+                fixed in the R3 Legend workflow (LegendWorkspace.jsx) via
+                real browser testing -- this file has the identical
+                latent bug, only now discovered because R3.5 is the first
+                time this legacy drag-selection interaction has been
+                driven by a real browser instead of manual testing. */}
+            <img
+              alt="Uploaded floor plan preview"
+              className="plan-image"
+              src={renderedPageUrl}
+              onLoad={handleImageLoad}
+              draggable={false}
+            />
             {overlays.map((rect) => {
               const display = toDisplayRect(rect, naturalSize, viewSize)
               if (!display) return null

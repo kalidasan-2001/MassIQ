@@ -33,6 +33,12 @@ module.exports = defineConfig({
   test: {
     environment: 'jsdom',
     setupFiles: ['./vitest.setup.js'],
-    globals: true
+    globals: true,
+    // R3.5: Vitest's default glob otherwise also collects e2e/specs/*.spec.js
+    // -- Playwright's own test files, which use @playwright/test's `test`/
+    // `expect` (real browser page/locator APIs), not Vitest's. Running them
+    // under Vitest/jsdom fails immediately since none of those APIs exist
+    // there. E2E specs run exclusively via `npm run test:e2e` (Playwright).
+    exclude: ['**/node_modules/**', '**/dist/**', 'e2e/**']
   }
 })

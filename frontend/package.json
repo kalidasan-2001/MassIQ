@@ -7,6 +7,11 @@
     "build": "vite build",
     "preview": "vite preview",
     "test": "vitest run",
+    "test:e2e": "playwright test",
+    "test:e2e:smoke": "playwright test --grep @smoke",
+    "test:e2e:headed": "playwright test --headed",
+    "test:e2e:ui": "playwright test --ui",
+    "test:e2e:report": "playwright show-report",
     "smoke:all": "node playwright.smoke.run.js"
   },
   "dependencies": {
@@ -15,6 +20,7 @@
     "react-dom": "18.2.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.60.0",
     "@testing-library/jest-dom": "^6.4.8",
     "@testing-library/react": "^14.3.1",
     "@testing-library/user-event": "^14.5.2",

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { parseThicknessSuggestionMm } from './materialParsing'
 
 /**
@@ -26,26 +26,38 @@ export default function LegendEntryEditor({
   const [materialName, setMaterialName] = useState('')
   const [materialCode, setMaterialCode] = useState('')
   const [thicknessMm, setThicknessMm] = useState('')
+  const loadedEntryIdRef = useRef(null)
 
-  // Switching to a different entry (or loading one for the first time)
-  // resets every local field from that entry's persisted state.
+  // Single effect, deliberately not split into "on entry change" and "on
+  // OCR completion" effects keyed on different dependencies: an earlier
+  // version did exactly that and had a real, reproducible race (caught by
+  // the R3.5 persistence E2E test, not by any unit/component test) --
+  // loading an already-confirmed entry changes both entry.id AND
+  // entry.raw_ocr_text in the same render, so both effects fired together,
+  // and the OCR-seeding effect's setCorrectedText call ran *after* (and so
+  // clobbered) the fresh-load effect's correct seeding from
+  // entry.corrected_text, silently showing the raw OCR text instead of the
+  // saved correction. A ref-tracked "is this actually a different entry"
+  // check collapses both cases into one unambiguous branch.
   useEffect(() => {
-    setCorrectedText(entry?.corrected_text ?? entry?.raw_ocr_text ?? '')
-    setMaterialName(entry?.material_name ?? '')
-    setMaterialCode(entry?.material_code ?? '')
-    setThicknessMm(entry?.thickness_mm ?? '')
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [entry?.id])
-
-  // Once OCR completes on the *currently loaded* entry, seed the
-  // correction field with the fresh OCR text -- but only if the user
-  // hasn't already typed something, so a manual entry is never clobbered.
-  useEffect(() => {
-    if (entry?.raw_ocr_text && !correctedText) {
+    if (!entry) {
+      loadedEntryIdRef.current = null
+      return
+    }
+    const isNewEntry = entry.id !== loadedEntryIdRef.current
+    loadedEntryIdRef.current = entry.id
+    if (isNewEntry) {
+      setCorrectedText(entry.corrected_text ?? entry.raw_ocr_text ?? '')
+      setMaterialName(entry.material_name ?? '')
+      setMaterialCode(entry.material_code ?? '')
+      setThicknessMm(entry.thickness_mm ?? '')
+    } else if (entry.raw_ocr_text && !correctedText) {
+      // Same entry, OCR just completed -- seed the correction field, but
+      // never clobber something the user already typed.
       setCorrectedText(entry.raw_ocr_text)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [entry?.raw_ocr_text])
+  }, [entry?.id, entry?.raw_ocr_text])
 
   if (!entry) {
     return <p className="muted">Select or create a legend entry to begin.</p>
@@ -96,8 +108,8 @@ export default function LegendEntryEditor({
       </div>
 
       <div className="field" style={{ marginTop: 16 }}>
-        <label>Raw OCR text (read-only -- never edited directly)</label>
-        <textarea value={entry.raw_ocr_text || ''} readOnly rows={2} />
+        <label htmlFor="legend-raw-ocr-text">Raw OCR text (read-only -- never edited directly)</label>
+        <textarea id="legend-raw-ocr-text" value={entry.raw_ocr_text || ''} readOnly rows={2} />
       </div>
       <button
         type="button"
@@ -114,8 +126,9 @@ export default function LegendEntryEditor({
       )}
 
       <div className="field" style={{ marginTop: 12 }}>
-        <label>Corrected description (this is what gets confirmed)</label>
+        <label htmlFor="legend-corrected-text">Corrected description (this is what gets confirmed)</label>
         <textarea
+          id="legend-corrected-text"
           value={correctedText}
           onChange={(event) => setCorrectedText(event.target.value)}
           rows={2}
@@ -123,21 +136,27 @@ export default function LegendEntryEditor({
         />
       </div>
       <div className="field">
-        <label>Material name</label>
+        <label htmlFor="legend-material-name">Material name</label>
         <input
+          id="legend-material-name"
           value={materialName}
           onChange={(event) => setMaterialName(event.target.value)}
           data-testid="material-name-input"
         />
       </div>
       <div className="field">
-        <label>Material code (optional)</label>
-        <input value={materialCode} onChange={(event) => setMaterialCode(event.target.value)} />
+        <label htmlFor="legend-material-code">Material code (optional)</label>
+        <input
+          id="legend-material-code"
+          value={materialCode}
+          onChange={(event) => setMaterialCode(event.target.value)}
+        />
       </div>
       <div className="field">
-        <label>Thickness (mm)</label>
+        <label htmlFor="legend-thickness-mm">Thickness (mm)</label>
         <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
           <input
+            id="legend-thickness-mm"
             type="number"
             value={thicknessMm}
             onChange={(event) => setThicknessMm(event.target.value)}
