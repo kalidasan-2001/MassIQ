@@ -180,7 +180,20 @@ export default function LegendWorkspace({ projectId, planId, pageNumber, planPag
           onMouseLeave={selection.onMouseUp}
           ref={selection.containerRef}
         >
-          <img alt={`Plan page ${pageNumber}`} className="plan-image" src={previewUrl} onLoad={selection.onImageLoad} />
+          {/* draggable={false} is load-bearing, not cosmetic: <img> is
+              natively draggable by default, and mousedown-then-move on an
+              undraggable-unset image makes Chromium hijack the gesture into
+              a native OS-level image drag after the first mousemove --
+              silently swallowing every mousemove/mouseup our own selection
+              handlers need. Found via real Playwright browser testing (a
+              curl-only check of the API can never catch this class of bug). */}
+          <img
+            alt={`Plan page ${pageNumber}`}
+            className="plan-image"
+            src={previewUrl}
+            onLoad={selection.onImageLoad}
+            draggable={false}
+          />
           {overlays.map((overlay) => {
             const display = normalizedToDisplayRect(overlay.rect, selection.viewSize)
             if (!display) return null
