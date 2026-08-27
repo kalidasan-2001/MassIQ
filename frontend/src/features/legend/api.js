@@ -79,6 +79,27 @@ export function confirmLegendEntry(projectId, planId, legendEntryId) {
   return api.post(`${legendBase(projectId, planId)}/${legendEntryId}/confirm`).then((response) => response.data)
 }
 
+// -- Hatch features (R4) -- thin, optional: getHatchFeatures returning
+// null on 404 is the normal "not computed yet" case, not an error.
+
+function featuresBase(projectId, planId, legendEntryId) {
+  return `${legendBase(projectId, planId)}/${legendEntryId}/features`
+}
+
+export function computeHatchFeatures(projectId, planId, legendEntryId, force = false) {
+  return api.post(featuresBase(projectId, planId, legendEntryId), { force }).then((response) => response.data)
+}
+
+export function getHatchFeatures(projectId, planId, legendEntryId) {
+  return api
+    .get(featuresBase(projectId, planId, legendEntryId))
+    .then((response) => response.data)
+    .catch((err) => {
+      if (err?.response?.status === 404) return null
+      throw err
+    })
+}
+
 export function patternCropUrl(projectId, planId, legendEntryId, cacheBust) {
   const base = api.defaults.baseURL || ''
   return `${base}${legendBase(projectId, planId)}/${legendEntryId}/pattern?v=${cacheBust || 0}`

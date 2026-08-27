@@ -9,7 +9,7 @@ from fastapi.responses import FileResponse
 
 load_dotenv()
 
-from app.routes import detection, export, legend_entries, plans, projects, vlm
+from app.routes import detection, export, hatch_features, legend_entries, plans, projects, vlm
 from app.services.measurement_service import analyze_section_dimensions
 from app.services.pdf_inspection_service import InvalidPdfError, open_and_validate
 from app.services.pdf_service import convert_pdf_first_page_to_png, suggest_plan_scale
@@ -29,6 +29,7 @@ app.include_router(vlm.router)
 app.include_router(projects.router)
 app.include_router(plans.router)
 app.include_router(legend_entries.router)
+app.include_router(hatch_features.router)
 
 
 @app.get("/")

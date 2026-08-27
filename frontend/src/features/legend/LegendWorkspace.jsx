@@ -27,6 +27,8 @@ export default function LegendWorkspace({ projectId, planId, pageNumber, planPag
   const [actionBusy, setActionBusy] = useState(false)
   const [actionError, setActionError] = useState('')
   const [cropVersion, setCropVersion] = useState(0)
+  const [hatchFeatures, setHatchFeatures] = useState(null)
+  const [featuresBusy, setFeaturesBusy] = useState(false)
 
   const {
     entries,
@@ -50,6 +52,22 @@ export default function LegendWorkspace({ projectId, planId, pageNumber, planPag
     [entries, planPageId]
   )
   const activeEntry = pageEntries.find((entry) => entry.id === activeEntryId) || null
+
+  // R4: best-effort status lookup only -- a 404 (not yet computed) is the
+  // normal case, not an error condition, and this never triggers
+  // computation itself (see legendApi.getHatchFeatures).
+  useEffect(() => {
+    let cancelled = false
+    setHatchFeatures(null)
+    if (activeEntry?.status === 'confirmed') {
+      legendApi.getHatchFeatures(projectId, planId, activeEntry.id).then((result) => {
+        if (!cancelled) setHatchFeatures(result)
+      })
+    }
+    return () => {
+      cancelled = true
+    }
+  }, [projectId, planId, activeEntry?.id, activeEntry?.status])
 
   const handleRegionComplete = async (mode, normalizedRect) => {
     if (!activeEntryId) {
@@ -126,6 +144,20 @@ export default function LegendWorkspace({ projectId, planId, pageNumber, planPag
       setActionError(extractErrorMessage(err, 'Cannot confirm this legend entry yet.'))
     } finally {
       setActionBusy(false)
+    }
+  }
+
+  const handleComputeFeatures = async () => {
+    if (!activeEntryId) return
+    setFeaturesBusy(true)
+    setActionError('')
+    try {
+      const result = await legendApi.computeHatchFeatures(projectId, planId, activeEntryId, !!hatchFeatures)
+      setHatchFeatures(result)
+    } catch (err) {
+      setActionError(extractErrorMessage(err, 'Failed to compute hatch features.'))
+    } finally {
+      setFeaturesBusy(false)
     }
   }
 
@@ -261,6 +293,9 @@ export default function LegendWorkspace({ projectId, planId, pageNumber, planPag
             onRunOcr={handleRunOcr}
             onSaveCorrection={handleSaveCorrection}
             onConfirm={handleConfirm}
+            hatchFeatures={hatchFeatures}
+            featuresBusy={featuresBusy}
+            onComputeFeatures={handleComputeFeatures}
           />
         </div>
       </div>

@@ -21,6 +21,9 @@ export default function LegendEntryEditor({
   onRunOcr,
   onSaveCorrection,
   onConfirm,
+  hatchFeatures,
+  featuresBusy,
+  onComputeFeatures,
 }) {
   const [correctedText, setCorrectedText] = useState('')
   const [materialName, setMaterialName] = useState('')
@@ -78,7 +81,12 @@ export default function LegendEntryEditor({
   return (
     <div className="card panel">
       <h3>Legend Entry</h3>
-      <div className={`status-pill ${isConfirmed ? 'status-completed' : ''}`}>{entry.status}</div>
+      <div
+        className={`status-pill ${isConfirmed ? 'status-completed' : ''}`}
+        data-testid="legend-status-pill"
+      >
+        {entry.status}
+      </div>
 
       <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginTop: 12 }}>
         <div>
@@ -185,6 +193,26 @@ export default function LegendEntryEditor({
         </button>
       </div>
       {error && <p className="error">{error}</p>}
+
+      {isConfirmed && (
+        <div style={{ marginTop: 16, paddingTop: 12, borderTop: '1px solid #e2e8ef' }}>
+          <p className="muted" style={{ marginBottom: 6 }}>Hatch features</p>
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+            <div className={`status-pill ${hatchFeatures ? 'status-completed' : ''}`}>
+              {hatchFeatures ? 'Computed' : 'Not computed'}
+            </div>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              disabled={featuresBusy}
+              onClick={onComputeFeatures}
+              data-testid="compute-features-btn"
+            >
+              {hatchFeatures ? 'Recompute' : 'Compute Features'}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

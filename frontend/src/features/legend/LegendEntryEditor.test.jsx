@@ -81,4 +81,49 @@ describe('LegendEntryEditor', () => {
     )
     expect(screen.getByRole('button', { name: /run ocr/i })).toBeDisabled()
   })
+
+  it('shows a hatch-features status indicator only once confirmed, "Not computed" until a result exists', () => {
+    const { rerender } = render(
+      <LegendEntryEditor
+        entry={{ ...baseEntry, status: 'ocr_complete' }}
+        onSaveCorrection={vi.fn()}
+        onConfirm={vi.fn()}
+        onRunOcr={vi.fn()}
+      />
+    )
+    expect(screen.queryByTestId('compute-features-btn')).not.toBeInTheDocument()
+
+    rerender(
+      <LegendEntryEditor
+        entry={{ ...baseEntry, status: 'confirmed' }}
+        onSaveCorrection={vi.fn()}
+        onConfirm={vi.fn()}
+        onRunOcr={vi.fn()}
+        hatchFeatures={null}
+        onComputeFeatures={vi.fn()}
+      />
+    )
+    expect(screen.getByText('Not computed')).toBeInTheDocument()
+    expect(screen.getByTestId('compute-features-btn')).toHaveTextContent('Compute Features')
+  })
+
+  it('shows "Computed" and offers Recompute once a hatch feature result exists', async () => {
+    const user = userEvent.setup()
+    const onComputeFeatures = vi.fn()
+    render(
+      <LegendEntryEditor
+        entry={{ ...baseEntry, status: 'confirmed' }}
+        onSaveCorrection={vi.fn()}
+        onConfirm={vi.fn()}
+        onRunOcr={vi.fn()}
+        hatchFeatures={{ feature_version: '1.0', is_cross_hatch: true }}
+        onComputeFeatures={onComputeFeatures}
+      />
+    )
+    expect(screen.getByText('Computed')).toBeInTheDocument()
+    const button = screen.getByTestId('compute-features-btn')
+    expect(button).toHaveTextContent('Recompute')
+    await user.click(button)
+    expect(onComputeFeatures).toHaveBeenCalledTimes(1)
+  })
 })

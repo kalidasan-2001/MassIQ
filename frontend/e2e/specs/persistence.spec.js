@@ -35,7 +35,7 @@ test.describe('E2E-04: persistence across reload', () => {
     await runOcr(page)
     await saveCorrection(page, { correctedText, materialName, thicknessMm: 150 })
     await confirmLegendEntry(page)
-    await expect(page.locator('.status-pill').last()).toHaveText('confirmed')
+    await expect(page.getByTestId('legend-status-pill')).toHaveText('confirmed')
 
     // Simulate closing/reopening the app.
     await page.reload({ waitUntil: 'networkidle' })
@@ -67,7 +67,7 @@ test.describe('E2E-04: persistence across reload', () => {
     await expect(page.locator('#legend-corrected-text')).toHaveValue(correctedText)
     await expect(page.locator('#legend-material-name')).toHaveValue(materialName)
     await expect(page.locator('#legend-thickness-mm')).toHaveValue('150')
-    await expect(page.locator('.status-pill').last()).toHaveText('confirmed')
+    await expect(page.getByTestId('legend-status-pill')).toHaveText('confirmed')
     await expect(page.getByTestId('confirm-btn')).toBeDisabled()
 
     monitor.assertClean()
