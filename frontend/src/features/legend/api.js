@@ -100,6 +100,32 @@ export function getHatchFeatures(projectId, planId, legendEntryId) {
     })
 }
 
+// -- Pattern library (R5) -----------------------------------------------
+
+export function addToPatternLibrary(projectId, planId, legendEntryId) {
+  return api.post(`${legendBase(projectId, planId)}/${legendEntryId}/library`).then((response) => response.data)
+}
+
+export function listPatternLibrary(projectId) {
+  return api.get(`/api/projects/${projectId}/pattern-library`).then((response) => response.data)
+}
+
+export function computeMatches(projectId, planId, legendEntryId, topK) {
+  return api
+    .post(`${legendBase(projectId, planId)}/${legendEntryId}/matches`, topK ? { top_k: topK } : {})
+    .then((response) => response.data)
+}
+
+export function recordMatchDecision(projectId, planId, legendEntryId, payload) {
+  return api
+    .post(`${legendBase(projectId, planId)}/${legendEntryId}/match-decision`, payload)
+    .then((response) => response.data)
+}
+
+export function listMatchDecisions(projectId, planId, legendEntryId) {
+  return api.get(`${legendBase(projectId, planId)}/${legendEntryId}/match-decisions`).then((response) => response.data)
+}
+
 export function patternCropUrl(projectId, planId, legendEntryId, cacheBust) {
   const base = api.defaults.baseURL || ''
   return `${base}${legendBase(projectId, planId)}/${legendEntryId}/pattern?v=${cacheBust || 0}`

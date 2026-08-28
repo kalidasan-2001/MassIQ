@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import * as legendApi from './api'
 import LegendWorkspace from './LegendWorkspace'
+import PatternLibraryPanel from './PatternLibraryPanel'
 
 /**
  * R3's prerequisite that didn't exist anywhere in the app before this
@@ -25,6 +26,7 @@ export default function LegendFeaturePage() {
 
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [libraryVersion, setLibraryVersion] = useState(0)
 
   const refreshProjects = async () => {
     try {
@@ -188,8 +190,11 @@ export default function LegendFeaturePage() {
           pageNumber={pageNumber}
           planPageId={currentPage.id}
           previewUrl={previewUrl}
+          onLibraryChanged={() => setLibraryVersion((v) => v + 1)}
         />
       )}
+
+      {projectId && <PatternLibraryPanel projectId={projectId} refreshKey={libraryVersion} />}
     </section>
   )
 }

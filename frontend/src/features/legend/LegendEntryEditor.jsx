@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { parseThicknessSuggestionMm } from './materialParsing'
+import PatternMatchesPanel from './PatternMatchesPanel'
 
 /**
  * OCR text -> user correction -> material confirmation, for one
@@ -24,6 +25,11 @@ export default function LegendEntryEditor({
   hatchFeatures,
   featuresBusy,
   onComputeFeatures,
+  projectId,
+  planId,
+  inLibrary,
+  libraryBusy,
+  onAddToLibrary,
 }) {
   const [correctedText, setCorrectedText] = useState('')
   const [materialName, setMaterialName] = useState('')
@@ -211,6 +217,35 @@ export default function LegendEntryEditor({
               {hatchFeatures ? 'Recompute' : 'Compute Features'}
             </button>
           </div>
+
+          {hatchFeatures && (
+            <>
+              <div style={{ marginTop: 10, display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+                <div className={`status-pill ${inLibrary ? 'status-completed' : ''}`}>
+                  {inLibrary ? 'In Project Library' : 'Not in library'}
+                </div>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  disabled={libraryBusy}
+                  onClick={onAddToLibrary}
+                  data-testid="add-to-library-btn"
+                >
+                  {inLibrary ? 'Update Library Entry' : 'Add to Project Library'}
+                </button>
+              </div>
+              <PatternMatchesPanel
+                projectId={projectId}
+                planId={planId}
+                legendEntryId={entry.id}
+                onUseMaterial={(candidate) => {
+                  setMaterialName(candidate.canonical_material_name)
+                  setMaterialCode(candidate.material_code || '')
+                  if (candidate.thickness_mm != null) setThicknessMm(candidate.thickness_mm)
+                }}
+              />
+            </>
+          )}
         </div>
       )}
     </div>

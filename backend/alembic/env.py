@@ -17,7 +17,15 @@ if str(BACKEND_DIR) not in sys.path:
 
 from app.core.config import get_settings  # noqa: E402
 from app.db.base import Base  # noqa: E402
-from app.models import hatch_feature_set, legend_entry, plan, plan_page, project  # noqa: E402,F401  -- registers ORM models on Base.metadata
+from app.models import (  # noqa: E402,F401  -- registers ORM models on Base.metadata
+    hatch_feature_set,
+    legend_entry,
+    pattern_library_entry,
+    pattern_match_decision,
+    plan,
+    plan_page,
+    project,
+)
 
 config = context.config
 

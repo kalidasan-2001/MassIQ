@@ -21,7 +21,7 @@ function extractErrorMessage(err, fallback) {
  * (projectId, planId, pageNumber). This is the top of the R3 feature --
  * PlanViewer.jsx is not touched by any of this.
  */
-export default function LegendWorkspace({ projectId, planId, pageNumber, planPageId, previewUrl }) {
+export default function LegendWorkspace({ projectId, planId, pageNumber, planPageId, previewUrl, onLibraryChanged }) {
   const [activeEntryId, setActiveEntryId] = useState(null)
   const [creating, setCreating] = useState(false)
   const [actionBusy, setActionBusy] = useState(false)
@@ -29,6 +29,8 @@ export default function LegendWorkspace({ projectId, planId, pageNumber, planPag
   const [cropVersion, setCropVersion] = useState(0)
   const [hatchFeatures, setHatchFeatures] = useState(null)
   const [featuresBusy, setFeaturesBusy] = useState(false)
+  const [inLibrary, setInLibrary] = useState(false)
+  const [libraryBusy, setLibraryBusy] = useState(false)
 
   const {
     entries,
@@ -59,6 +61,7 @@ export default function LegendWorkspace({ projectId, planId, pageNumber, planPag
   useEffect(() => {
     let cancelled = false
     setHatchFeatures(null)
+    setInLibrary(false)
     if (activeEntry?.status === 'confirmed') {
       legendApi.getHatchFeatures(projectId, planId, activeEntry.id).then((result) => {
         if (!cancelled) setHatchFeatures(result)
@@ -158,6 +161,21 @@ export default function LegendWorkspace({ projectId, planId, pageNumber, planPag
       setActionError(extractErrorMessage(err, 'Failed to compute hatch features.'))
     } finally {
       setFeaturesBusy(false)
+    }
+  }
+
+  const handleAddToLibrary = async () => {
+    if (!activeEntryId) return
+    setLibraryBusy(true)
+    setActionError('')
+    try {
+      await legendApi.addToPatternLibrary(projectId, planId, activeEntryId)
+      setInLibrary(true)
+      onLibraryChanged?.()
+    } catch (err) {
+      setActionError(extractErrorMessage(err, 'Failed to add this pattern to the project library.'))
+    } finally {
+      setLibraryBusy(false)
     }
   }
 
@@ -296,6 +314,11 @@ export default function LegendWorkspace({ projectId, planId, pageNumber, planPag
             hatchFeatures={hatchFeatures}
             featuresBusy={featuresBusy}
             onComputeFeatures={handleComputeFeatures}
+            projectId={projectId}
+            planId={planId}
+            inLibrary={inLibrary}
+            libraryBusy={libraryBusy}
+            onAddToLibrary={handleAddToLibrary}
           />
         </div>
       </div>
