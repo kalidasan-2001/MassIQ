@@ -158,6 +158,81 @@ export function updateDetectedRegion(projectId, planId, runId, regionId, status)
     .then((response) => response.data)
 }
 
+// -- R7: manual corrections, plan scale, quantity ------------------------
+
+function runBase(projectId, planId, runId) {
+  return `/api/projects/${projectId}/plans/${planId}/detection-runs/${runId}`
+}
+
+export function createManualCorrection(projectId, planId, runId, correctionType, normalizedRect) {
+  return api
+    .post(`${runBase(projectId, planId, runId)}/manual-corrections`, {
+      correction_type: correctionType,
+      x: normalizedRect.x,
+      y: normalizedRect.y,
+      width: normalizedRect.width,
+      height: normalizedRect.height,
+    })
+    .then((response) => response.data)
+}
+
+export function listManualCorrections(projectId, planId, runId) {
+  return api.get(`${runBase(projectId, planId, runId)}/manual-corrections`).then((response) => response.data)
+}
+
+export function deleteManualCorrection(projectId, planId, runId, correctionId) {
+  return api.delete(`${runBase(projectId, planId, runId)}/manual-corrections/${correctionId}`)
+}
+
+export function getPlanScale(projectId, planId, pageNumber) {
+  return api
+    .get(`/api/projects/${projectId}/plans/${planId}/pages/${pageNumber}/scale`)
+    .then((response) => response.data)
+    .catch((err) => {
+      if (err?.response?.status === 404) return null
+      throw err
+    })
+}
+
+export function confirmDeclaredScale(projectId, planId, pageNumber, declaredRatio) {
+  return api
+    .put(`/api/projects/${projectId}/plans/${planId}/pages/${pageNumber}/scale`, {
+      method: 'declared_scale',
+      declared_ratio: declaredRatio,
+    })
+    .then((response) => response.data)
+}
+
+export function confirmCalibratedScale(projectId, planId, pageNumber, planPoints, realMeters) {
+  return api
+    .put(`/api/projects/${projectId}/plans/${planId}/pages/${pageNumber}/scale`, {
+      method: 'calibrated_distance',
+      calibrated_distance_plan_points: planPoints,
+      calibrated_distance_real_m: realMeters,
+    })
+    .then((response) => response.data)
+}
+
+export function calculateQuantity(projectId, planId, runId, confirmedDimensionM) {
+  return api
+    .post(`${runBase(projectId, planId, runId)}/quantity`, { confirmed_dimension_m: confirmedDimensionM })
+    .then((response) => response.data)
+}
+
+export function getQuantity(projectId, planId, runId) {
+  return api
+    .get(`${runBase(projectId, planId, runId)}/quantity`)
+    .then((response) => response.data)
+    .catch((err) => {
+      if (err?.response?.status === 404) return null
+      throw err
+    })
+}
+
+export function confirmQuantity(projectId, planId, runId) {
+  return api.post(`${runBase(projectId, planId, runId)}/quantity/confirm`).then((response) => response.data)
+}
+
 export function patternCropUrl(projectId, planId, legendEntryId, cacheBust) {
   const base = api.defaults.baseURL || ''
   return `${base}${legendBase(projectId, planId)}/${legendEntryId}/pattern?v=${cacheBust || 0}`

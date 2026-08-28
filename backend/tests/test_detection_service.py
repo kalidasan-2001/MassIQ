@@ -25,6 +25,7 @@ from tests.db_test_support import build_test_engine, new_sessionmaker, truncate_
 
 from app.models.detected_region import DetectedRegionStatus
 from app.models.detection_run import DetectionRunStatus
+from app.models.hatch_feature_set import HatchFeatureSet
 from app.schemas.legend_entry import LegendEntryUpdate
 from app.schemas.project import ProjectCreate
 from app.services.detection_service import (
@@ -34,6 +35,7 @@ from app.services.detection_service import (
     ExactlyOneReferenceRequiredError,
     PagePreviewNotAvailableError,
     ReferenceFeatureSetRequiredError,
+    ReferenceFeatureVersionOutdatedError,
     ReferenceNotConfirmedError,
     ReferenceNotFoundError,
 )
@@ -145,6 +147,22 @@ class StartRunValidationTests(DetectionServiceTestsBase):
     def test_unknown_legend_entry_raises_not_found(self):
         with self.assertRaises(LegendEntryNotFoundError):
             self.detection_service.start_run(self.project.id, self.plan.id, 1, legend_entry_id=uuid.uuid4())
+
+    def test_outdated_feature_version_reference_raises_clear_error(self):
+        """R7 section 4 -- closes the LOW future-risk the R6 independent
+        review flagged: an outdated reference must raise a clear,
+        explicit domain error before the run starts, not silently
+        complete with zero candidates indistinguishable from 'nothing
+        found'."""
+        entry = self._confirmed_reference_entry(hfx.family_a_parallel_45())
+        feature_set = self.session.query(HatchFeatureSet).filter_by(legend_entry_id=entry.id).one()
+        feature_set.feature_version = "0.9-outdated"
+        self.session.commit()
+
+        with self.assertRaises(ReferenceFeatureVersionOutdatedError) as ctx:
+            self.detection_service.start_run(self.project.id, self.plan.id, 1, legend_entry_id=entry.id)
+        self.assertEqual(ctx.exception.error_code, "REFERENCE_FEATURE_VERSION_OUTDATED")
+        self.assertIn("REFERENCE_FEATURE_VERSION_OUTDATED", str(ctx.exception))
 
     def test_unknown_pattern_library_entry_raises(self):
         entry = self._confirmed_reference_entry(hfx.family_a_parallel_45())

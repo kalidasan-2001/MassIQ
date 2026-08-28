@@ -15,10 +15,13 @@ from app.routes import (
     export,
     hatch_features,
     legend_entries,
+    manual_corrections,
     pattern_library,
     pattern_matches,
+    plan_scale,
     plans,
     projects,
+    quantity,
     vlm,
 )
 from app.services.measurement_service import analyze_section_dimensions
@@ -45,6 +48,9 @@ app.include_router(pattern_library.router)
 app.include_router(pattern_matches.router)
 app.include_router(detection_runs.page_router)
 app.include_router(detection_runs.run_router)
+app.include_router(plan_scale.router)
+app.include_router(manual_corrections.router)
+app.include_router(quantity.router)
 
 
 @app.get("/")

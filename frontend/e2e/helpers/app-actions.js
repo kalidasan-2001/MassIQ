@@ -150,6 +150,45 @@ async function confirmLegendEntry(page) {
   return response
 }
 
+/**
+ * R7: clicks Manual Add/Subtract first, then drags a REAL pointer over the
+ * plan image -- same technique (and same reason) as dragSelectRegion.
+ * `kind` is 'add' | 'subtract'.
+ */
+async function dragManualCorrection(page, kind, region) {
+  const buttonTestId = kind === 'add' ? 'manual-add-btn' : 'manual-subtract-btn'
+  const responsePromise = page.waitForResponse(
+    (res) => res.url().includes('/manual-corrections') && res.request().method() === 'POST'
+  )
+  await page.getByTestId(buttonTestId).click()
+  await dragOverImageRegion(page, page.locator('img[alt^="Plan page"]'), region)
+  const response = await responsePromise
+  return response
+}
+
+/** R7: confirms a declared (1:N) plan scale via the Quantity panel. */
+async function confirmDeclaredScale(page, ratio) {
+  const responsePromise = page.waitForResponse(
+    (res) => res.url().includes('/scale') && res.request().method() === 'PUT'
+  )
+  await page.getByTestId('declared-ratio-input').fill(String(ratio))
+  await page.getByTestId('confirm-scale-btn').click()
+  const response = await responsePromise
+  return response
+}
+
+/** R7: confirms the height/thickness dimension and calculates the
+ * authoritative backend QuantityResult. */
+async function calculateQuantity(page, dimensionM) {
+  const responsePromise = page.waitForResponse(
+    (res) => res.url().includes('/quantity') && res.request().method() === 'POST'
+  )
+  await page.getByTestId('confirmed-dimension-input').fill(String(dimensionM))
+  await page.getByTestId('calculate-quantity-btn').click()
+  const response = await responsePromise
+  return response
+}
+
 module.exports = {
   FIXTURE_PDF,
   uniqueName,
@@ -163,4 +202,7 @@ module.exports = {
   runOcr,
   saveCorrection,
   confirmLegendEntry,
+  dragManualCorrection,
+  confirmDeclaredScale,
+  calculateQuantity,
 }

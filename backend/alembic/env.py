@@ -22,11 +22,14 @@ from app.models import (  # noqa: E402,F401  -- registers ORM models on Base.met
     detection_run,
     hatch_feature_set,
     legend_entry,
+    manual_region_correction,
     pattern_library_entry,
     pattern_match_decision,
     plan,
     plan_page,
+    plan_scale,
     project,
+    quantity_result,
 )
 
 config = context.config

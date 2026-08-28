@@ -19,6 +19,7 @@ from app.services.detection_service import (
     ExactlyOneReferenceRequiredError,
     PagePreviewNotAvailableError,
     ReferenceFeatureSetRequiredError,
+    ReferenceFeatureVersionOutdatedError,
     ReferenceNotConfirmedError,
     ReferenceNotFoundError,
 )
@@ -88,6 +89,8 @@ async def start_detection_run(
     except ReferenceNotConfirmedError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except ReferenceFeatureSetRequiredError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except ReferenceFeatureVersionOutdatedError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except ReferenceNotFoundError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

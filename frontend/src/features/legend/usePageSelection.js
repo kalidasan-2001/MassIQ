@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { draftToNormalizedRect } from './coordinates'
 
 /**
@@ -14,6 +14,7 @@ import { draftToNormalizedRect } from './coordinates'
  */
 export function usePageSelection(onRegionComplete) {
   const containerRef = useRef(null)
+  const imgRef = useRef(null)
   const modeRef = useRef(null)
   const draftRef = useRef(null)
 
@@ -21,6 +22,30 @@ export function usePageSelection(onRegionComplete) {
   const [naturalSize, setNaturalSize] = useState({ width: 0, height: 0 })
   const [viewSize, setViewSize] = useState({ width: 0, height: 0 })
   const [draftRect, setDraftRect] = useState(null)
+
+  // R7: `viewSize` must track the image's actual rendered size for the
+  // lifetime of the component, not just its size at the moment `onLoad`
+  // fired -- every overlay on the page (pattern/description/detection/
+  // manual-correction) is positioned from `normalizedToDisplayRect(rect,
+  // viewSize)`, and a stale viewSize after a browser window resize makes
+  // every overlay visibly drift away from the plan image underneath it.
+  // Found via a real Playwright browser resize (see
+  // e2e/specs/review-quantity.spec.js's coordinate-resilience check) --
+  // exactly the class of bug a curl-only/component-only test cannot catch,
+  // the same lesson the R3 native-image-drag bug already taught.
+  useEffect(() => {
+    const img = imgRef.current
+    if (!img || typeof ResizeObserver === 'undefined') return undefined
+    const observer = new ResizeObserver(() => {
+      setViewSize({ width: img.clientWidth, height: img.clientHeight })
+    })
+    observer.observe(img)
+    return () => observer.disconnect()
+    // Re-attach once the image identity/natural size actually changes
+    // (a new preview loaded) -- imgRef.current is set synchronously in
+    // onImageLoad before this effect's dependency changes trigger a rerun.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [naturalSize.width, naturalSize.height])
 
   const startMode = (nextMode) => {
     modeRef.current = nextMode
@@ -36,6 +61,7 @@ export function usePageSelection(onRegionComplete) {
 
   const onImageLoad = (event) => {
     const img = event.currentTarget
+    imgRef.current = img
     setNaturalSize({ width: img.naturalWidth, height: img.naturalHeight })
     setViewSize({ width: img.clientWidth, height: img.clientHeight })
   }

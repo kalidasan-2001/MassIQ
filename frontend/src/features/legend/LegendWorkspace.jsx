@@ -6,7 +6,16 @@ import LegendSelectionToolbar from './LegendSelectionToolbar'
 import LegendEntryEditor from './LegendEntryEditor'
 import LegendEntryList from './LegendEntryList'
 import DetectionPanel from './DetectionPanel'
+import ManualCorrectionPanel from './ManualCorrectionPanel'
+import QuantityPanel from './QuantityPanel'
 import * as legendApi from './api'
+
+const MODE_LABELS = {
+  pattern: 'pattern selection',
+  description: 'description selection',
+  manual_add: 'manual Add region',
+  manual_subtract: 'manual Subtract region',
+}
 
 function extractErrorMessage(err, fallback) {
   const detail = err?.response?.data?.detail
@@ -35,6 +44,10 @@ export default function LegendWorkspace({ projectId, planId, pageNumber, planPag
   const [detectionRun, setDetectionRun] = useState(null)
   const [detectedRegions, setDetectedRegions] = useState([])
   const [detectionBusy, setDetectionBusy] = useState(false)
+  const [manualCorrections, setManualCorrections] = useState([])
+  const [planScale, setPlanScale] = useState(null)
+  const [quantityResult, setQuantityResult] = useState(null)
+  const [quantityBusy, setQuantityBusy] = useState(false)
 
   const {
     entries,
@@ -101,7 +114,73 @@ export default function LegendWorkspace({ projectId, planId, pageNumber, planPag
     }
   }, [projectId, planId, pageNumber])
 
+  // R7: PlanScale is page-scoped (reused by every run on this page), so
+  // it is rediscovered independently of any particular DetectionRun.
+  // Same "DB is the only source of truth, .catch swallows the normal
+  // not-yet-confirmed 404" discipline as the R6 run-rediscovery effect
+  // above.
+  useEffect(() => {
+    let cancelled = false
+    setPlanScale(null)
+    legendApi
+      .getPlanScale(projectId, planId, pageNumber)
+      .then((scale) => {
+        if (!cancelled) setPlanScale(scale)
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [projectId, planId, pageNumber])
+
+  // R7: manual corrections and the QuantityResult are scoped to the
+  // rediscovered DetectionRun (see the effect above) -- re-fetched
+  // whenever that run identity changes, including right after it is
+  // first rediscovered on a fresh reload.
+  useEffect(() => {
+    let cancelled = false
+    setManualCorrections([])
+    setQuantityResult(null)
+    if (!detectionRun) return undefined
+    legendApi
+      .listManualCorrections(projectId, planId, detectionRun.id)
+      .then((corrections) => {
+        if (!cancelled) setManualCorrections(corrections)
+      })
+      .catch(() => {})
+    legendApi
+      .getQuantity(projectId, planId, detectionRun.id)
+      .then((result) => {
+        if (!cancelled) setQuantityResult(result)
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [projectId, planId, detectionRun?.id])
+
   const handleRegionComplete = async (mode, normalizedRect) => {
+    if (mode === 'manual_add' || mode === 'manual_subtract') {
+      if (!detectionRun) {
+        setActionError('Run Detection V2 before adding manual corrections.')
+        return
+      }
+      setQuantityBusy(true)
+      setActionError('')
+      try {
+        const correctionType = mode === 'manual_add' ? 'add' : 'subtract'
+        const created = await legendApi.createManualCorrection(
+          projectId, planId, detectionRun.id, correctionType, normalizedRect
+        )
+        setManualCorrections((prev) => [...prev, created])
+      } catch (err) {
+        setActionError(extractErrorMessage(err, 'Failed to save the manual correction.'))
+      } finally {
+        setQuantityBusy(false)
+      }
+      return
+    }
+
     if (!activeEntryId) {
       setActionError('Create or select a legend entry before drawing a selection.')
       return
@@ -242,6 +321,82 @@ export default function LegendWorkspace({ projectId, planId, pageNumber, planPag
     }
   }
 
+  const handleDeleteManualCorrection = async (correctionId) => {
+    if (!detectionRun) return
+    setQuantityBusy(true)
+    setActionError('')
+    try {
+      await legendApi.deleteManualCorrection(projectId, planId, detectionRun.id, correctionId)
+      setManualCorrections((prev) => prev.filter((c) => c.id !== correctionId))
+    } catch (err) {
+      setActionError(extractErrorMessage(err, 'Failed to remove the manual correction.'))
+    } finally {
+      setQuantityBusy(false)
+    }
+  }
+
+  const handleConfirmDeclaredScale = async (declaredRatio) => {
+    setQuantityBusy(true)
+    setActionError('')
+    try {
+      const scale = await legendApi.confirmDeclaredScale(projectId, planId, pageNumber, declaredRatio)
+      setPlanScale(scale)
+    } catch (err) {
+      setActionError(extractErrorMessage(err, 'Failed to confirm scale.'))
+    } finally {
+      setQuantityBusy(false)
+    }
+  }
+
+  const handleConfirmCalibratedScale = async (planPoints, realMeters) => {
+    setQuantityBusy(true)
+    setActionError('')
+    try {
+      const scale = await legendApi.confirmCalibratedScale(projectId, planId, pageNumber, planPoints, realMeters)
+      setPlanScale(scale)
+    } catch (err) {
+      setActionError(extractErrorMessage(err, 'Failed to confirm scale.'))
+    } finally {
+      setQuantityBusy(false)
+    }
+  }
+
+  const handleCalculateQuantity = async (confirmedDimensionM) => {
+    if (!detectionRun) return
+    setQuantityBusy(true)
+    setActionError('')
+    try {
+      const result = await legendApi.calculateQuantity(projectId, planId, detectionRun.id, confirmedDimensionM)
+      setQuantityResult(result)
+    } catch (err) {
+      setActionError(extractErrorMessage(err, 'Failed to calculate quantity.'))
+    } finally {
+      setQuantityBusy(false)
+    }
+  }
+
+  const handleConfirmQuantityResult = async () => {
+    if (!detectionRun) return
+    setQuantityBusy(true)
+    setActionError('')
+    try {
+      const result = await legendApi.confirmQuantity(projectId, planId, detectionRun.id)
+      setQuantityResult(result)
+    } catch (err) {
+      setActionError(extractErrorMessage(err, 'Failed to confirm quantity result.'))
+    } finally {
+      setQuantityBusy(false)
+    }
+  }
+
+  const reviewCounts = {
+    candidate: detectedRegions.filter((r) => r.status === 'candidate').length,
+    accepted: detectedRegions.filter((r) => r.status === 'accepted').length,
+    rejected: detectedRegions.filter((r) => r.status === 'rejected').length,
+    manualAdd: manualCorrections.filter((c) => c.correction_type === 'add').length,
+    manualSubtract: manualCorrections.filter((c) => c.correction_type === 'subtract').length,
+  }
+
   const overlays = [
     activeEntry?.has_pattern_selection
       ? {
@@ -282,7 +437,7 @@ export default function LegendWorkspace({ projectId, planId, pageNumber, planPag
         <strong>Plan Page {pageNumber}</strong>
         <p className="muted">
           {selection.mode
-            ? `Drawing ${selection.mode} selection -- drag a rectangle on the page.`
+            ? `Drawing ${MODE_LABELS[selection.mode] || selection.mode} -- drag a rectangle on the page.`
             : 'Create or select a legend entry, then draw a pattern and description selection.'}
         </p>
         <div
@@ -326,6 +481,18 @@ export default function LegendWorkspace({ projectId, planId, pageNumber, planPag
                 key={region.id}
                 className={`plan-overlay overlay-detection-${region.status}`}
                 style={{ left: display.left, top: display.top, width: display.width, height: display.height }}
+              />
+            )
+          })}
+          {manualCorrections.map((correction) => {
+            const display = normalizedToDisplayRect(correction, selection.viewSize)
+            if (!display) return null
+            return (
+              <div
+                key={correction.id}
+                className={`plan-overlay overlay-${correction.correction_type}`}
+                style={{ left: display.left, top: display.top, width: display.width, height: display.height }}
+                data-testid={`manual-overlay-${correction.correction_type}`}
               />
             )
           })}
@@ -405,6 +572,38 @@ export default function LegendWorkspace({ projectId, planId, pageNumber, planPag
               disabled={!activeEntryId}
               onRunDetection={handleRunDetection}
               onUpdateRegionStatus={handleUpdateRegionStatus}
+            />
+          </div>
+        )}
+
+        {detectionRun && detectionRun.status === 'completed' && (
+          <div className="card panel" style={{ marginTop: 16 }}>
+            <ManualCorrectionPanel
+              mode={selection.mode === 'manual_add' || selection.mode === 'manual_subtract' ? selection.mode : null}
+              corrections={manualCorrections}
+              busy={quantityBusy}
+              disabled={actionBusy}
+              onStartAdd={() => selection.startMode('manual_add')}
+              onStartSubtract={() => selection.startMode('manual_subtract')}
+              onCancel={selection.cancelMode}
+              onDeleteCorrection={handleDeleteManualCorrection}
+            />
+          </div>
+        )}
+
+        {detectionRun && detectionRun.status === 'completed' && (
+          <div className="card panel" style={{ marginTop: 16 }}>
+            <QuantityPanel
+              scale={planScale}
+              quantity={quantityResult}
+              suggestedThicknessMm={activeEntry?.thickness_mm ?? null}
+              busy={quantityBusy}
+              disabled={false}
+              reviewCounts={reviewCounts}
+              onConfirmDeclaredScale={handleConfirmDeclaredScale}
+              onConfirmCalibratedScale={handleConfirmCalibratedScale}
+              onCalculate={handleCalculateQuantity}
+              onConfirmResult={handleConfirmQuantityResult}
             />
           </div>
         )}

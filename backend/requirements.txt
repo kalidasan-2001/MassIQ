@@ -18,3 +18,10 @@ sqlalchemy
 alembic
 psycopg2-binary
 pydantic-settings
+
+# R7 -- quantity engine union/subtraction geometry (see
+# docs/architecture/REVIEW_AND_QUANTITY_ENGINE.md's "geometry library
+# decision"). Already resolved transitively via rapidocr-onnxruntime (R3);
+# pinned explicitly here so it is a documented, intentional dependency
+# rather than an incidental one, with no new supply-chain surface added.
+shapely==2.1.2

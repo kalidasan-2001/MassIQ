@@ -36,6 +36,7 @@ from app.detection.config import (
     TILE_STRIDE_PX,
 )
 from app.detection.detector import TooManyTilesError, run_detection
+from app.hatch.config import FEATURE_VERSION
 from app.hatch.similarity.models import ComparableFeatures
 from app.models.detected_region import DetectedRegion, DetectedRegionStatus
 from app.models.detection_run import DetectionRun, DetectionRunStatus
@@ -54,6 +55,7 @@ __all__ = [
     "ReferenceNotConfirmedError",
     "ReferenceFeatureSetRequiredError",
     "ReferenceNotFoundError",
+    "ReferenceFeatureVersionOutdatedError",
     "PagePreviewNotAvailableError",
     "DetectionRunNotFoundError",
     "DetectedRegionNotFoundError",
@@ -84,6 +86,30 @@ class ReferenceNotFoundError(Exception):
     def __init__(self, reference_id: uuid.UUID):
         self.reference_id = reference_id
         super().__init__(f"Reference {reference_id} not found in this project")
+
+
+class ReferenceFeatureVersionOutdatedError(Exception):
+    """R7 section 4 -- closes the LOW future-risk the R6 independent
+    review flagged: without this guard, a reference HatchFeatureSet
+    computed under an old FEATURE_VERSION would still be accepted, every
+    tile would then fail combined_similarity's own version-mismatch gate,
+    and the run would complete as COMPLETED with zero candidates --
+    indistinguishable from "genuinely nothing found on this page". This
+    guard raises a clear, explicit domain error before the run ever
+    starts, instead. Does not modify the detector algorithm itself, and
+    is not a migration/backfill framework -- just a pre-run equality
+    check against the one current FEATURE_VERSION constant."""
+
+    error_code = "REFERENCE_FEATURE_VERSION_OUTDATED"
+
+    def __init__(self, reference_feature_version: str, current_feature_version: str):
+        self.reference_feature_version = reference_feature_version
+        self.current_feature_version = current_feature_version
+        super().__init__(
+            f"{self.error_code}: reference was computed with feature_version="
+            f"'{reference_feature_version}', but the current feature_version is "
+            f"'{current_feature_version}'. Recompute features on the reference before running detection."
+        )
 
 
 class PagePreviewNotAvailableError(Exception):
@@ -140,6 +166,7 @@ class DetectionService:
                     f"LegendEntry {legend_entry_id} has no computed HatchFeatureSet yet -- "
                     "compute features explicitly before running detection"
                 )
+            self._require_current_feature_version(feature_set)
             return feature_set
 
         library_entry = self._db.get(PatternLibraryEntry, pattern_library_entry_id)
@@ -153,7 +180,17 @@ class DetectionService:
             raise ReferenceFeatureSetRequiredError(
                 f"PatternLibraryEntry {pattern_library_entry_id} has no valid HatchFeatureSet"
             )
+        self._require_current_feature_version(feature_set)
         return feature_set
+
+    @staticmethod
+    def _require_current_feature_version(feature_set: HatchFeatureSet) -> None:
+        """R7 section 4 pre-run guard -- see ReferenceFeatureVersionOutdatedError.
+        A plain equality check against the one current FEATURE_VERSION
+        constant; not a version-compatibility matrix, not a migration
+        framework."""
+        if feature_set.feature_version != FEATURE_VERSION:
+            raise ReferenceFeatureVersionOutdatedError(feature_set.feature_version, FEATURE_VERSION)
 
     # -- run execution -----------------------------------------------
 
