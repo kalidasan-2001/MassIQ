@@ -107,8 +107,10 @@ test.describe('E2E-06: Detection Engine V2 (real pointer/mouse input)', () => {
     await section.locator('select').nth(1).selectOption({ index: 1 })
 
     // Re-select the (only) legend entry so the features/detection panel
-    // renders again.
-    await page.getByText('Stahlbeton C25/30').first().click()
+    // renders again. Scoped to the legend entry list specifically -- R8's
+    // Results panel now also displays the material name elsewhere on the
+    // same page, so an unscoped text match is ambiguous.
+    await page.getByTestId('legend-entry-list').getByText('Stahlbeton C25/30').first().click()
     await expect(page.getByText('Computed', { exact: true })).toBeVisible()
 
     await expect(page.getByTestId('detected-region-list')).toBeVisible({ timeout: 10000 })

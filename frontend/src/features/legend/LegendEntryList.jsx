@@ -14,7 +14,7 @@ export default function LegendEntryList({ entries, activeEntryId, onSelect, onCr
         {creating ? 'Creating...' : '+ New Legend Entry'}
       </button>
       {entries.length === 0 && <p className="muted">No legend entries yet for this page.</p>}
-      <div style={{ display: 'grid', gap: 8 }}>
+      <div style={{ display: 'grid', gap: 8 }} data-testid="legend-entry-list">
         {entries.map((entry) => (
           <button
             type="button"

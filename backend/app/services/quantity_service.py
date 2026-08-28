@@ -30,7 +30,7 @@ from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 
 from app.geometry.config import CALCULATION_VERSION
-from app.geometry.service import NormalizedRect, compute_final_area_m2
+from app.geometry.service import GeometryValidationError, NormalizedRect, compute_final_area_m2
 from app.models.detected_region import DetectedRegionStatus
 from app.models.manual_region_correction import ManualCorrectionType
 from app.models.plan_page import PlanPage
@@ -48,7 +48,18 @@ __all__ = [
     "InvalidDimensionError",
     "ScaleNotConfirmedError",
     "QuantityResultNotFoundError",
+    "GeometryStateError",
 ]
+
+
+class GeometryStateError(Exception):
+    """R8 section 4 hardening -- wraps app.geometry.service.GeometryValidationError
+    with quantity-calculation context. Reaching this indicates a persisted
+    DetectedRegion/ManualRegionCorrection/PlanScale row somehow holds
+    non-finite geometry despite every known write path validating its
+    inputs (ManualCorrectionService, PlanScaleService, the R6 tiler) --
+    a data-integrity signal worth logging and surfacing as a safe,
+    controlled 500, never a raw GEOSException traceback to the caller."""
 
 
 class InvalidDimensionError(Exception):
@@ -115,13 +126,22 @@ class QuantityService:
         ]
         negative_rects = [NormalizedRect(c.x, c.y, c.width, c.height) for c in subtractions]
 
-        final_area_m2 = compute_final_area_m2(
-            positive_rects,
-            negative_rects,
-            page_width_points=page.width,
-            page_height_points=page.height,
-            real_meters_per_plan_point=scale.real_meters_per_plan_point,
-        )
+        try:
+            final_area_m2 = compute_final_area_m2(
+                positive_rects,
+                negative_rects,
+                page_width_points=page.width,
+                page_height_points=page.height,
+                real_meters_per_plan_point=scale.real_meters_per_plan_point,
+            )
+        except GeometryValidationError as exc:
+            logger.error(
+                "quantity_geometry_invalid project_id=%s detection_run_id=%s error=%s",
+                project_id, run.id, exc,
+            )
+            raise GeometryStateError(
+                "This run's geometry could not be processed. Contact support if this persists."
+            ) from exc
         volume_m3 = final_area_m2 * confirmed_dimension_m
 
         result = self._db.query(QuantityResult).filter_by(detection_run_id=run.id).one_or_none()

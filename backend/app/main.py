@@ -22,6 +22,7 @@ from app.routes import (
     plans,
     projects,
     quantity,
+    results,
     vlm,
 )
 from app.services.measurement_service import analyze_section_dimensions
@@ -36,6 +37,13 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    # R8: Content-Disposition is not on the CORS-safelisted response
+    # header list, so without this, frontend JS on a different origin/port
+    # (true for local dev and the E2E harness -- frontend and backend run
+    # on different ports) cannot read the server-chosen, sanitized export
+    # filename at all -- found via a real cross-origin browser download in
+    # E2E-08, not visible to any same-process pytest/TestClient call.
+    expose_headers=["Content-Disposition"],
 )
 app.include_router(export.router)
 app.include_router(detection.router)
@@ -51,6 +59,7 @@ app.include_router(detection_runs.run_router)
 app.include_router(plan_scale.router)
 app.include_router(manual_corrections.router)
 app.include_router(quantity.router)
+app.include_router(results.router)
 
 
 @app.get("/")

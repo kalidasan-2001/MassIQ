@@ -30,8 +30,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from shapely.errors import ShapelyError
 from shapely.geometry import box as shapely_box
 from shapely.ops import unary_union
+
+__all__ = ["NormalizedRect", "GeometryValidationError", "compute_final_area_m2"]
 
 
 @dataclass(frozen=True)
@@ -46,6 +49,29 @@ class NormalizedRect:
     height: float
 
 
+class GeometryValidationError(Exception):
+    """R8 section 4 -- the minimal hardening fix for the LOW/MEDIUM
+    defense-in-depth gap the R7 independent review flagged: this module
+    previously trusted every caller to have already validated its inputs
+    (true today -- ManualCorrectionService/PlanScaleService/the R6 tiler
+    all validate upstream -- but fragile to a future caller that doesn't).
+    Raised instead of letting a raw NaN/Infinity coordinate, or any
+    unexpected `shapely.errors.ShapelyError` from the underlying GEOS
+    calls, ever propagate to an API client as an uncontrolled exception.
+    Does not change the union/subtraction algorithm itself."""
+
+
+_FINITE_RANGE = (float("-inf"), float("inf"))
+
+
+def _require_finite(rect: NormalizedRect) -> None:
+    for value in (rect.x, rect.y, rect.width, rect.height):
+        if value is None or value != value or value in _FINITE_RANGE:  # None/NaN/Infinity
+            raise GeometryValidationError(
+                f"Geometry values must be finite numbers (no NaN/Infinity): {rect!r}"
+            )
+
+
 def _rect_to_meter_polygon(
     rect: NormalizedRect,
     page_width_points: float,
@@ -56,11 +82,18 @@ def _rect_to_meter_polygon(
     meter coordinates. page_width_points/page_height_points come from the
     PlanPage's own persisted PDF-point geometry (never re-derived from a
     rendered preview's pixel size, which can change with DPI settings)."""
+    _require_finite(rect)
     x0 = rect.x * page_width_points * real_meters_per_plan_point
     y0 = rect.y * page_height_points * real_meters_per_plan_point
     x1 = (rect.x + rect.width) * page_width_points * real_meters_per_plan_point
     y1 = (rect.y + rect.height) * page_height_points * real_meters_per_plan_point
-    return shapely_box(x0, y0, x1, y1)
+    try:
+        return shapely_box(x0, y0, x1, y1)
+    except ShapelyError as exc:
+        # Safety net for any other malformed-geometry case the explicit
+        # finite-value check above doesn't already catch -- never let a
+        # raw GEOS exception reach a caller.
+        raise GeometryValidationError(f"Could not construct geometry from {rect!r}: {exc}") from exc
 
 
 def compute_final_area_m2(
@@ -86,21 +119,29 @@ def compute_final_area_m2(
     if not positive_rects:
         return 0.0
 
-    positive_polygons = [
-        _rect_to_meter_polygon(rect, page_width_points, page_height_points, real_meters_per_plan_point)
-        for rect in positive_rects
-    ]
-    positive_union = unary_union(positive_polygons)
-
-    if negative_rects:
-        negative_polygons = [
+    try:
+        positive_polygons = [
             _rect_to_meter_polygon(rect, page_width_points, page_height_points, real_meters_per_plan_point)
-            for rect in negative_rects
+            for rect in positive_rects
         ]
-        negative_union = unary_union(negative_polygons)
-        final_geometry = positive_union.difference(negative_union)
-    else:
-        final_geometry = positive_union
+        positive_union = unary_union(positive_polygons)
+
+        if negative_rects:
+            negative_polygons = [
+                _rect_to_meter_polygon(rect, page_width_points, page_height_points, real_meters_per_plan_point)
+                for rect in negative_rects
+            ]
+            negative_union = unary_union(negative_polygons)
+            final_geometry = positive_union.difference(negative_union)
+        else:
+            final_geometry = positive_union
+    except GeometryValidationError:
+        raise
+    except ShapelyError as exc:
+        # Safety net around the union/difference operations themselves
+        # (not just box construction) -- same "never a raw GEOS exception
+        # reaches a caller" contract as _rect_to_meter_polygon above.
+        raise GeometryValidationError(f"Geometry union/subtraction failed: {exc}") from exc
 
     # Defensive clamp: a valid Shapely polygon's .area is already >= 0 and
     # finite, but this makes the "never negative, never NaN/Infinity"

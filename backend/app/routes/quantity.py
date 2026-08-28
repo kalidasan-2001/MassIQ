@@ -11,6 +11,7 @@ from app.services.detection_service import DetectionRunNotFoundError
 from app.services.plan_service import PlanNotFoundError
 from app.services.project_service import ProjectNotFoundError
 from app.services.quantity_service import (
+    GeometryStateError,
     InvalidDimensionError,
     QuantityResultNotFoundError,
     QuantityService,
@@ -57,6 +58,11 @@ async def calculate_quantity(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except ScaleNotConfirmedError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except GeometryStateError as exc:
+        # A data-integrity signal, not a bad request -- the caller's own
+        # input (confirmed_dimension_m) was fine; a persisted geometry row
+        # was not. Never a raw GEOSException traceback (R8 section 4).
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
 @router.get("", response_model=QuantityResultResponse)

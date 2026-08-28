@@ -14,7 +14,7 @@ BACKEND_DIR = Path(__file__).resolve().parents[1]
 if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
-from app.geometry.service import NormalizedRect, compute_final_area_m2
+from app.geometry.service import GeometryValidationError, NormalizedRect, compute_final_area_m2
 
 # Non-square page on purpose -- a square page cannot catch an x/y axis
 # mixup bug (both axes would silently produce the same wrong answer).
@@ -104,6 +104,38 @@ class GoldenGeometryTests(unittest.TestCase):
     def test_duplicate_identical_positive_rects_counted_once(self):
         rect = NormalizedRect(0, 0, 0.1, 0.05)
         result = area([rect, rect, rect])
+        self.assertAlmostEqual(result, 100.0, places=6)
+
+
+class GeometryDefenseInDepthTests(unittest.TestCase):
+    """R8 section 4 -- the minimal hardening fix for the R7 independent
+    review's MEDIUM finding: a NaN/Infinity coordinate must raise a
+    controlled GeometryValidationError, never a raw
+    shapely.errors.GEOSException. Not reachable through the live API
+    today (every real caller validates upstream), but this module must
+    not itself trust that forever."""
+
+    def test_nan_width_raises_controlled_error_not_geos_exception(self):
+        with self.assertRaises(GeometryValidationError):
+            area([NormalizedRect(0, 0, float("nan"), 0.1)])
+
+    def test_infinity_width_raises_controlled_error(self):
+        with self.assertRaises(GeometryValidationError):
+            area([NormalizedRect(0, 0, float("inf"), 0.1)])
+
+    def test_negative_infinity_x_raises_controlled_error(self):
+        with self.assertRaises(GeometryValidationError):
+            area([NormalizedRect(float("-inf"), 0, 0.1, 0.1)])
+
+    def test_nan_in_negative_rect_raises_controlled_error(self):
+        with self.assertRaises(GeometryValidationError):
+            area([NormalizedRect(0, 0, 0.5, 0.5)], [NormalizedRect(0, 0, float("nan"), 0.1)])
+
+    def test_valid_geometry_still_works_after_hardening(self):
+        # The hardening fix must not change correct-input behavior --
+        # same case as test_case_a above, re-asserted here to prove the
+        # new validation path doesn't reject valid input.
+        result = area([NormalizedRect(0, 0, 0.1, 0.05)])
         self.assertAlmostEqual(result, 100.0, places=6)
 
 

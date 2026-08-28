@@ -31,7 +31,15 @@ function extractErrorMessage(err, fallback) {
  * (projectId, planId, pageNumber). This is the top of the R3 feature --
  * PlanViewer.jsx is not touched by any of this.
  */
-export default function LegendWorkspace({ projectId, planId, pageNumber, planPageId, previewUrl, onLibraryChanged }) {
+export default function LegendWorkspace({
+  projectId,
+  planId,
+  pageNumber,
+  planPageId,
+  previewUrl,
+  onLibraryChanged,
+  onResultsChanged,
+}) {
   const [activeEntryId, setActiveEntryId] = useState(null)
   const [creating, setCreating] = useState(false)
   const [actionBusy, setActionBusy] = useState(false)
@@ -368,6 +376,7 @@ export default function LegendWorkspace({ projectId, planId, pageNumber, planPag
     try {
       const result = await legendApi.calculateQuantity(projectId, planId, detectionRun.id, confirmedDimensionM)
       setQuantityResult(result)
+      onResultsChanged?.()
     } catch (err) {
       setActionError(extractErrorMessage(err, 'Failed to calculate quantity.'))
     } finally {
@@ -382,6 +391,7 @@ export default function LegendWorkspace({ projectId, planId, pageNumber, planPag
     try {
       const result = await legendApi.confirmQuantity(projectId, planId, detectionRun.id)
       setQuantityResult(result)
+      onResultsChanged?.()
     } catch (err) {
       setActionError(extractErrorMessage(err, 'Failed to confirm quantity result.'))
     } finally {

@@ -233,6 +233,28 @@ export function confirmQuantity(projectId, planId, runId) {
   return api.post(`${runBase(projectId, planId, runId)}/quantity/confirm`).then((response) => response.data)
 }
 
+// -- Results & Export (R8) ------------------------------------------------
+
+export function listResults(projectId) {
+  return api.get(`/api/projects/${projectId}/results`).then((response) => response.data)
+}
+
+export function getResult(projectId, quantityResultId) {
+  return api.get(`/api/projects/${projectId}/results/${quantityResultId}`).then((response) => response.data)
+}
+
+export function exportPreflight(projectId) {
+  return api.get(`/api/projects/${projectId}/results/export/preflight`).then((response) => response.data)
+}
+
+/** Downloads the authoritative CONFIRMED-only Excel workbook. Returns the
+ * response so the caller can drive a real browser download from a real
+ * blob -- this function never constructs workbook bytes itself, it only
+ * triggers the backend to generate them (R8 section 25). */
+export function exportResults(projectId) {
+  return api.post(`/api/projects/${projectId}/results/export`, null, { responseType: 'blob' })
+}
+
 export function patternCropUrl(projectId, planId, legendEntryId, cacheBust) {
   const base = api.defaults.baseURL || ''
   return `${base}${legendBase(projectId, planId)}/${legendEntryId}/pattern?v=${cacheBust || 0}`

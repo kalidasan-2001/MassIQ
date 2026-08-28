@@ -189,6 +189,17 @@ async function calculateQuantity(page, dimensionM) {
   return response
 }
 
+/** R8: confirms the current DRAFT QuantityResult, moving it into export
+ * eligibility. */
+async function confirmQuantityResult(page) {
+  const responsePromise = page.waitForResponse(
+    (res) => res.url().includes('/quantity/confirm') && res.request().method() === 'POST'
+  )
+  await page.getByTestId('confirm-quantity-btn').click()
+  const response = await responsePromise
+  return response
+}
+
 module.exports = {
   FIXTURE_PDF,
   uniqueName,
@@ -205,4 +216,5 @@ module.exports = {
   dragManualCorrection,
   confirmDeclaredScale,
   calculateQuantity,
+  confirmQuantityResult,
 }
