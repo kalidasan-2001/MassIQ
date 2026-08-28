@@ -10,5 +10,8 @@
 module.exports = {
   PATTERN_REGION: { x: 0.12, y: 0.30, width: 0.16, height: 0.20 },
   DESCRIPTION_REGION: { x: 0.55, y: 0.32, width: 0.30, height: 0.10 },
+  // R6: a second, independent hatch region elsewhere on the same fixture
+  // page -- see backend/scripts/generate_e2e_fixture.py's own comment.
+  SECOND_PATTERN_REGION: { x: 0.12, y: 0.62, width: 0.16, height: 0.16 },
   EXPECTED_OCR_SUBSTRING: 'Stahlbeton',
 }

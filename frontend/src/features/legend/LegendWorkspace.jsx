@@ -5,6 +5,7 @@ import { useLegendEntries } from './useLegendEntries'
 import LegendSelectionToolbar from './LegendSelectionToolbar'
 import LegendEntryEditor from './LegendEntryEditor'
 import LegendEntryList from './LegendEntryList'
+import DetectionPanel from './DetectionPanel'
 import * as legendApi from './api'
 
 function extractErrorMessage(err, fallback) {
@@ -31,6 +32,9 @@ export default function LegendWorkspace({ projectId, planId, pageNumber, planPag
   const [featuresBusy, setFeaturesBusy] = useState(false)
   const [inLibrary, setInLibrary] = useState(false)
   const [libraryBusy, setLibraryBusy] = useState(false)
+  const [detectionRun, setDetectionRun] = useState(null)
+  const [detectedRegions, setDetectedRegions] = useState([])
+  const [detectionBusy, setDetectionBusy] = useState(false)
 
   const {
     entries,
@@ -71,6 +75,31 @@ export default function LegendWorkspace({ projectId, planId, pageNumber, planPag
       cancelled = true
     }
   }, [projectId, planId, activeEntry?.id, activeEntry?.status])
+
+  // R6: rediscovers the most recent Detection V2 run for this page after
+  // a mount/reload -- the DB is the only source of truth (see
+  // DetectionService.list_runs_for_page), nothing is cached client-side.
+  useEffect(() => {
+    let cancelled = false
+    setDetectionRun(null)
+    setDetectedRegions([])
+    legendApi
+      .listDetectionRunsForPage(projectId, planId, pageNumber)
+      .then((runs) => {
+        if (cancelled || runs.length === 0) return
+        const mostRecent = runs[0]
+        setDetectionRun(mostRecent)
+        if (mostRecent.status === 'completed') {
+          legendApi.listDetectedRegions(projectId, planId, mostRecent.id).then((regions) => {
+            if (!cancelled) setDetectedRegions(regions)
+          })
+        }
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [projectId, planId, pageNumber])
 
   const handleRegionComplete = async (mode, normalizedRect) => {
     if (!activeEntryId) {
@@ -179,6 +208,40 @@ export default function LegendWorkspace({ projectId, planId, pageNumber, planPag
     }
   }
 
+  const handleRunDetection = async () => {
+    if (!activeEntryId) return
+    setDetectionBusy(true)
+    setActionError('')
+    try {
+      const run = await legendApi.startDetectionRun(projectId, planId, pageNumber, activeEntryId)
+      setDetectionRun(run)
+      if (run.status === 'completed') {
+        const regions = await legendApi.listDetectedRegions(projectId, planId, run.id)
+        setDetectedRegions(regions)
+      } else {
+        setDetectedRegions([])
+      }
+    } catch (err) {
+      setActionError(extractErrorMessage(err, 'Detection V2 failed to run.'))
+    } finally {
+      setDetectionBusy(false)
+    }
+  }
+
+  const handleUpdateRegionStatus = async (regionId, status) => {
+    if (!detectionRun) return
+    setDetectionBusy(true)
+    setActionError('')
+    try {
+      const updated = await legendApi.updateDetectedRegion(projectId, planId, detectionRun.id, regionId, status)
+      setDetectedRegions((prev) => prev.map((region) => (region.id === regionId ? updated : region)))
+    } catch (err) {
+      setActionError(extractErrorMessage(err, 'Failed to update the region.'))
+    } finally {
+      setDetectionBusy(false)
+    }
+  }
+
   const overlays = [
     activeEntry?.has_pattern_selection
       ? {
@@ -255,6 +318,17 @@ export default function LegendWorkspace({ projectId, planId, pageNumber, planPag
               />
             )
           })}
+          {detectedRegions.map((region) => {
+            const display = normalizedToDisplayRect(region, selection.viewSize)
+            if (!display) return null
+            return (
+              <div
+                key={region.id}
+                className={`plan-overlay overlay-detection-${region.status}`}
+                style={{ left: display.left, top: display.top, width: display.width, height: display.height }}
+              />
+            )
+          })}
           {draftDisplayRect && (
             <div
               className="plan-overlay overlay-draft"
@@ -321,6 +395,19 @@ export default function LegendWorkspace({ projectId, planId, pageNumber, planPag
             onAddToLibrary={handleAddToLibrary}
           />
         </div>
+
+        {hatchFeatures && (
+          <div className="card panel" style={{ marginTop: 16 }}>
+            <DetectionPanel
+              run={detectionRun}
+              regions={detectedRegions}
+              busy={detectionBusy}
+              disabled={!activeEntryId}
+              onRunDetection={handleRunDetection}
+              onUpdateRegionStatus={handleUpdateRegionStatus}
+            />
+          </div>
+        )}
       </div>
     </div>
   )

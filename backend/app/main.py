@@ -11,6 +11,7 @@ load_dotenv()
 
 from app.routes import (
     detection,
+    detection_runs,
     export,
     hatch_features,
     legend_entries,
@@ -42,6 +43,8 @@ app.include_router(legend_entries.router)
 app.include_router(hatch_features.router)
 app.include_router(pattern_library.router)
 app.include_router(pattern_matches.router)
+app.include_router(detection_runs.page_router)
+app.include_router(detection_runs.run_router)
 
 
 @app.get("/")

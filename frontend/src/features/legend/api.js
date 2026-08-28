@@ -126,6 +126,38 @@ export function listMatchDecisions(projectId, planId, legendEntryId) {
   return api.get(`${legendBase(projectId, planId)}/${legendEntryId}/match-decisions`).then((response) => response.data)
 }
 
+// -- Detection Engine V2 (R6) --------------------------------------------
+
+export function startDetectionRun(projectId, planId, pageNumber, referenceLegendEntryId) {
+  return api
+    .post(`/api/projects/${projectId}/plans/${planId}/pages/${pageNumber}/detection-runs`, {
+      legend_entry_id: referenceLegendEntryId,
+    })
+    .then((response) => response.data)
+}
+
+export function listDetectionRunsForPage(projectId, planId, pageNumber) {
+  return api
+    .get(`/api/projects/${projectId}/plans/${planId}/pages/${pageNumber}/detection-runs`)
+    .then((response) => response.data)
+}
+
+export function getDetectionRun(projectId, planId, runId) {
+  return api.get(`/api/projects/${projectId}/plans/${planId}/detection-runs/${runId}`).then((response) => response.data)
+}
+
+export function listDetectedRegions(projectId, planId, runId) {
+  return api
+    .get(`/api/projects/${projectId}/plans/${planId}/detection-runs/${runId}/regions`)
+    .then((response) => response.data)
+}
+
+export function updateDetectedRegion(projectId, planId, runId, regionId, status) {
+  return api
+    .patch(`/api/projects/${projectId}/plans/${planId}/detection-runs/${runId}/regions/${regionId}`, { status })
+    .then((response) => response.data)
+}
+
 export function patternCropUrl(projectId, planId, legendEntryId, cacheBust) {
   const base = api.defaults.baseURL || ''
   return `${base}${legendBase(projectId, planId)}/${legendEntryId}/pattern?v=${cacheBust || 0}`

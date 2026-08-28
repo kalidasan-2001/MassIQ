@@ -280,6 +280,26 @@ b {
   background: rgba(37, 99, 235, 0.12);
 }
 
+/* R6: Detection Engine V2 candidate-region overlays -- same border+fill
+   visual language as the overlays above, one more state (rejected, shown
+   dashed/faded) since a DetectedRegion's status changes in place rather
+   than being removed. */
+.overlay-detection-candidate {
+  border-color: var(--color-overlay-hatch);
+  background: rgba(217, 119, 6, 0.1);
+}
+
+.overlay-detection-accepted {
+  border-color: var(--color-accent);
+  background: rgba(15, 118, 110, 0.16);
+}
+
+.overlay-detection-rejected {
+  border-style: dashed;
+  border-color: var(--color-danger-text);
+  background: rgba(180, 35, 24, 0.08);
+}
+
 .advanced-details summary {
   cursor: pointer;
   color: var(--color-text-muted);

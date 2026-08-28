@@ -35,6 +35,13 @@ PAGE_HEIGHT = 595.0
 # coordinates never drift apart silently.
 PATTERN_REGION = {"x": 0.12, "y": 0.30, "width": 0.16, "height": 0.20}
 DESCRIPTION_REGION = {"x": 0.55, "y": 0.32, "width": 0.30, "height": 0.10}
+# R6: a second, independent hatch region -- same pattern, well clear of
+# PATTERN_REGION/DESCRIPTION_REGION and the centerlines below -- so
+# Detection Engine V2 scanning the whole page has a genuine second real
+# target to find alongside the confirmed reference (see
+# frontend/e2e/specs/detection-v2.spec.js). Additive only: every existing
+# spec's coordinates (PATTERN_REGION/DESCRIPTION_REGION) are unchanged.
+SECOND_PATTERN_REGION = {"x": 0.12, "y": 0.62, "width": 0.16, "height": 0.16}
 
 
 def _draw_hatch_pattern(page: fitz.Page, rect: fitz.Rect) -> None:
@@ -79,6 +86,16 @@ def build_fixture_pdf() -> bytes:
         (PATTERN_REGION["y"] + PATTERN_REGION["height"]) * PAGE_HEIGHT,
     )
     _draw_hatch_pattern(page, pattern_rect)
+
+    # A second, independent hatch region (R6) -- same drawing routine, same
+    # angle/spacing, just a different location on the page.
+    second_pattern_rect = fitz.Rect(
+        SECOND_PATTERN_REGION["x"] * PAGE_WIDTH,
+        SECOND_PATTERN_REGION["y"] * PAGE_HEIGHT,
+        (SECOND_PATTERN_REGION["x"] + SECOND_PATTERN_REGION["width"]) * PAGE_WIDTH,
+        (SECOND_PATTERN_REGION["y"] + SECOND_PATTERN_REGION["height"]) * PAGE_HEIGHT,
+    )
+    _draw_hatch_pattern(page, second_pattern_rect)
 
     # The selectable legend description text -- legible, OCR-friendly.
     desc_x = DESCRIPTION_REGION["x"] * PAGE_WIDTH
