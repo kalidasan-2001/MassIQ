@@ -19,8 +19,10 @@ test.describe('E2E-02: project and plan (real UI)', () => {
     await expect(section.locator('select').first()).toHaveValue(/.+/)
 
     await uploadPlan(page)
-    await expect(section.locator('select').nth(1)).toContainText('plan-fixture.pdf')
-    await expect(section.locator('select').nth(1)).toContainText('ready')
+    // R9: the plan picker is now a status-pill list (PlansStage.jsx), not
+    // a <select> -- see docs/architecture/R9_WORKFLOW_AUDIT.md.
+    await expect(section.getByTestId('plan-list')).toContainText('plan-fixture.pdf')
+    await expect(section.getByTestId('plan-list')).toContainText('Ready')
 
     const preview = await waitForPersistedPreview(page)
     await expect(preview).toBeVisible()

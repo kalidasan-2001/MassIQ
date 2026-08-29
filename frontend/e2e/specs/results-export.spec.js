@@ -124,19 +124,11 @@ test.describe('E2E-08: Results and Export (real pointer/mouse input, real downlo
     await expect(page.getByTestId('export-status')).toHaveText('Export downloaded.')
 
     // -- Reload: the confirmed result must persist purely from server
-    // state (R8 section 32's spirit / R7's own established discipline). --
+    // state (R8 section 32's spirit / R7's own established discipline).
+    // R9 adds URL-based workflow state (section 30): the project is
+    // restored automatically from the URL on reload, and Results is
+    // project-wide so no plan/page re-selection is needed either. --
     await page.reload({ waitUntil: 'networkidle' })
-    const section = r3Section(page)
-    await section.locator('select').first().selectOption({ label: projectName })
-    await page.waitForFunction(
-      () => {
-        const select = document.querySelectorAll('select')[1]
-        return select && select.options.length > 1
-      },
-      null,
-      { timeout: 10000 }
-    )
-    await section.locator('select').nth(1).selectOption({ index: 1 })
 
     await expect(page.getByTestId('results-table')).toBeVisible({ timeout: 10000 })
     const reloadedRow = page.getByTestId('result-row').filter({ hasText: 'Stahlbeton C25/30' })

@@ -7,18 +7,13 @@ const round = (value, decimals) => {
 }
 
 /**
- * R7: drawing-scale confirmation, confirmed dimension, and the
- * authoritative backend-computed QuantityResult (area/volume) for one
- * DetectionRun. Deliberately three concerns in one panel (scale,
- * dimension, result) since they form one linear "confirm scale -> confirm
- * dimension -> calculate" sequence the user works through in order --
- * splitting further would just scatter one workflow across more files
- * with no reuse benefit (R7 section 25: "functional first").
- *
- * Never derives the confirmed dimension automatically (R7 section 17) --
- * `suggestedThicknessMm` (from LegendEntry.thickness_mm) is offered only
- * as a one-click convenience, exactly like LegendEntryEditor's own
- * thickness suggestion button.
+ * R9 Review stage: the dimension/quantity half of what used to be
+ * QuantityPanel.jsx (R7) -- the scale-confirmation half moved to
+ * ScaleConfirmationPanel.jsx (Plan Preparation stage). Deliberately
+ * still requires a confirmed scale (passed in as `scale`, read-only here)
+ * before calculation is enabled -- R7's authority rules are unchanged,
+ * only where the scale form itself lives moved. All existing
+ * data-testids preserved.
  */
 export default function QuantityPanel({
   scale,
@@ -27,24 +22,10 @@ export default function QuantityPanel({
   busy,
   disabled,
   reviewCounts,
-  onConfirmDeclaredScale,
-  onConfirmCalibratedScale,
   onCalculate,
   onConfirmResult,
 }) {
-  const [scaleMethod, setScaleMethod] = useState('declared_scale')
-  const [declaredRatio, setDeclaredRatio] = useState('100')
-  const [calibratedPlanPoints, setCalibratedPlanPoints] = useState('')
-  const [calibratedRealM, setCalibratedRealM] = useState('')
   const [dimensionM, setDimensionM] = useState('')
-
-  const handleConfirmScale = () => {
-    if (scaleMethod === 'declared_scale') {
-      onConfirmDeclaredScale?.(Number(declaredRatio))
-    } else {
-      onConfirmCalibratedScale?.(Number(calibratedPlanPoints), Number(calibratedRealM))
-    }
-  }
 
   const handleCalculate = () => {
     onCalculate?.(Number(dimensionM))
@@ -60,76 +41,6 @@ export default function QuantityPanel({
         Candidates {reviewCounts.candidate}, Accepted {reviewCounts.accepted}, Rejected {reviewCounts.rejected},
         Manual additions {reviewCounts.manualAdd}, Manual subtractions {reviewCounts.manualSubtract}.
       </p>
-
-      <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid #e2e8ef' }}>
-        <p className="muted" style={{ marginBottom: 6 }}>Drawing scale</p>
-        {scale ? (
-          <p className="status-pill status-completed" data-testid="scale-status">
-            Confirmed ({scale.method === 'declared_scale' ? `1:${scale.declared_ratio}` : 'calibrated distance'})
-          </p>
-        ) : (
-          <p className="status-pill" data-testid="scale-status">Not confirmed</p>
-        )}
-
-        <div className="field">
-          <label htmlFor="scale-method">Method</label>
-          <select
-            id="scale-method"
-            className="select"
-            value={scaleMethod}
-            onChange={(event) => setScaleMethod(event.target.value)}
-            data-testid="scale-method-select"
-          >
-            <option value="declared_scale">Declared scale (e.g. 1:100)</option>
-            <option value="calibrated_distance">Calibrated distance</option>
-          </select>
-        </div>
-
-        {scaleMethod === 'declared_scale' ? (
-          <div className="field">
-            <label htmlFor="declared-ratio">Ratio (the N in 1:N)</label>
-            <input
-              id="declared-ratio"
-              type="number"
-              value={declaredRatio}
-              onChange={(event) => setDeclaredRatio(event.target.value)}
-              data-testid="declared-ratio-input"
-            />
-          </div>
-        ) : (
-          <>
-            <div className="field">
-              <label htmlFor="calibrated-plan-points">Measured plan distance (points)</label>
-              <input
-                id="calibrated-plan-points"
-                type="number"
-                value={calibratedPlanPoints}
-                onChange={(event) => setCalibratedPlanPoints(event.target.value)}
-                data-testid="calibrated-plan-points-input"
-              />
-            </div>
-            <div className="field">
-              <label htmlFor="calibrated-real-m">Real-world distance (m)</label>
-              <input
-                id="calibrated-real-m"
-                type="number"
-                value={calibratedRealM}
-                onChange={(event) => setCalibratedRealM(event.target.value)}
-                data-testid="calibrated-real-m-input"
-              />
-            </div>
-          </>
-        )}
-        <button
-          type="button"
-          className="btn btn-secondary"
-          disabled={busy || disabled}
-          onClick={handleConfirmScale}
-          data-testid="confirm-scale-btn"
-        >
-          Confirm Scale
-        </button>
-      </div>
 
       <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid #e2e8ef' }}>
         <div className="field">
