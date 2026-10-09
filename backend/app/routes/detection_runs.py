@@ -91,7 +91,18 @@ async def start_detection_run(
     except ReferenceFeatureSetRequiredError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except ReferenceFeatureVersionOutdatedError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error_code": exc.error_code,
+                "message": (
+                    "This hatch was analyzed with an older feature version. "
+                    "Recompute the hatch features before running analysis."
+                ),
+                "reference_feature_version": exc.reference_feature_version,
+                "current_feature_version": exc.current_feature_version,
+            },
+        ) from exc
     except ReferenceNotFoundError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except PagePreviewNotAvailableError as exc:

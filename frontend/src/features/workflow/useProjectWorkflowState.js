@@ -1,45 +1,23 @@
-import React, { useEffect, useMemo, useState } from 'react'
-import { normalizedToDisplayRect } from './coordinates'
-import { usePageSelection } from './usePageSelection'
-import { useLegendEntries } from './useLegendEntries'
-import LegendSelectionToolbar from './LegendSelectionToolbar'
-import LegendEntryEditor from './LegendEntryEditor'
-import LegendEntryList from './LegendEntryList'
-import DetectionPanel from './DetectionPanel'
-import ManualCorrectionPanel from './ManualCorrectionPanel'
-import QuantityPanel from './QuantityPanel'
-import * as legendApi from './api'
-
-const MODE_LABELS = {
-  pattern: 'pattern selection',
-  description: 'description selection',
-  manual_add: 'manual Add region',
-  manual_subtract: 'manual Subtract region',
-}
-
-function extractErrorMessage(err, fallback) {
-  const detail = err?.response?.data?.detail
-  if (detail && typeof detail === 'object' && Array.isArray(detail.reasons)) {
-    return `${detail.message}: ${detail.reasons.join(', ')}`
-  }
-  return detail || err?.message || fallback
-}
+import { useEffect, useMemo, useState } from 'react'
+import { usePageSelection } from '../legend/usePageSelection'
+import { useLegendEntries } from '../legend/useLegendEntries'
+import { extractErrorMessage, extractErrorCode } from '../legend/apiErrors'
+import * as legendApi from '../legend/api'
+import { deriveWorkflowStages, pickCurrentStage, isEntryInLibrary } from './deriveWorkflowStages'
 
 /**
- * Composes the persisted-plan-page view, the two-selection toolbar, the
- * OCR/correction/material editor, and the entry list for one
- * (projectId, planId, pageNumber). This is the top of the R3 feature --
- * PlanViewer.jsx is not touched by any of this.
+ * R9: the single source of truth for one (projectId, planId, pageNumber)
+ * workflow session. This is the old LegendWorkspace.jsx's state/effects/
+ * handlers, lifted one level so the new stage components
+ * (features/workflow/*Stage.jsx) can each render a thin slice of it
+ * instead of one 623-line component owning every stage's UI. No behavior
+ * changed here versus the pre-R9 flow -- same API calls, same effects,
+ * same handlers -- only reorganized, plus the derived `stages` status and
+ * the `inLibrary` staleness fix (R9 audit finding: it used to be a
+ * session-only flag that forgot "already in library" across a refresh;
+ * now it's derived from the fetched library list every time).
  */
-export default function LegendWorkspace({
-  projectId,
-  planId,
-  pageNumber,
-  planPageId,
-  previewUrl,
-  onLibraryChanged,
-  onResultsChanged,
-}) {
+export function useProjectWorkflowState({ projectId, planId, pageNumber, planPageId, plans, onLibraryChanged, onResultsChanged }) {
   const [activeEntryId, setActiveEntryId] = useState(null)
   const [creating, setCreating] = useState(false)
   const [actionBusy, setActionBusy] = useState(false)
@@ -47,11 +25,12 @@ export default function LegendWorkspace({
   const [cropVersion, setCropVersion] = useState(0)
   const [hatchFeatures, setHatchFeatures] = useState(null)
   const [featuresBusy, setFeaturesBusy] = useState(false)
-  const [inLibrary, setInLibrary] = useState(false)
+  const [libraryEntries, setLibraryEntries] = useState([])
   const [libraryBusy, setLibraryBusy] = useState(false)
   const [detectionRun, setDetectionRun] = useState(null)
   const [detectedRegions, setDetectedRegions] = useState([])
   const [detectionBusy, setDetectionBusy] = useState(false)
+  const [featureVersionOutdated, setFeatureVersionOutdated] = useState(false)
   const [manualCorrections, setManualCorrections] = useState([])
   const [planScale, setPlanScale] = useState(null)
   const [quantityResult, setQuantityResult] = useState(null)
@@ -59,9 +38,9 @@ export default function LegendWorkspace({
 
   const {
     entries,
-    loading,
-    error: listError,
-    refresh,
+    loading: entriesLoading,
+    error: entriesError,
+    refresh: refreshEntries,
     createDraft,
     savePattern,
     saveDescription,
@@ -71,8 +50,8 @@ export default function LegendWorkspace({
   } = useLegendEntries(projectId, planId)
 
   useEffect(() => {
-    refresh()
-  }, [refresh])
+    refreshEntries()
+  }, [refreshEntries])
 
   const pageEntries = useMemo(
     () => (planPageId ? entries.filter((entry) => entry.plan_page_id === planPageId) : entries),
@@ -80,13 +59,12 @@ export default function LegendWorkspace({
   )
   const activeEntry = pageEntries.find((entry) => entry.id === activeEntryId) || null
 
-  // R4: best-effort status lookup only -- a 404 (not yet computed) is the
+  // Best-effort status lookup only -- a 404 (not yet computed) is the
   // normal case, not an error condition, and this never triggers
   // computation itself (see legendApi.getHatchFeatures).
   useEffect(() => {
     let cancelled = false
     setHatchFeatures(null)
-    setInLibrary(false)
     if (activeEntry?.status === 'confirmed') {
       legendApi.getHatchFeatures(projectId, planId, activeEntry.id).then((result) => {
         if (!cancelled) setHatchFeatures(result)
@@ -97,13 +75,30 @@ export default function LegendWorkspace({
     }
   }, [projectId, planId, activeEntry?.id, activeEntry?.status])
 
-  // R6: rediscovers the most recent Detection V2 run for this page after
-  // a mount/reload -- the DB is the only source of truth (see
-  // DetectionService.list_runs_for_page), nothing is cached client-side.
+  const refreshLibrary = () => {
+    if (!projectId) return
+    legendApi
+      .listPatternLibrary(projectId)
+      .then((result) => setLibraryEntries(result))
+      .catch(() => {})
+  }
+
+  useEffect(refreshLibrary, [projectId])
+
+  // R9 audit fix: "already in library" is derived from the fetched
+  // library list (matched on source_legend_entry_id), not a session-only
+  // flag -- so it survives a refresh instead of forgetting a pattern was
+  // already added until the user clicks "Add" again.
+  const inLibrary = isEntryInLibrary(activeEntry, libraryEntries)
+
+  // Rediscovers the most recent Detection V2 run for this page after a
+  // mount/reload -- the DB is the only source of truth, nothing is cached
+  // client-side.
   useEffect(() => {
     let cancelled = false
     setDetectionRun(null)
     setDetectedRegions([])
+    if (!projectId || !planId) return undefined
     legendApi
       .listDetectionRunsForPage(projectId, planId, pageNumber)
       .then((runs) => {
@@ -122,14 +117,12 @@ export default function LegendWorkspace({
     }
   }, [projectId, planId, pageNumber])
 
-  // R7: PlanScale is page-scoped (reused by every run on this page), so
-  // it is rediscovered independently of any particular DetectionRun.
-  // Same "DB is the only source of truth, .catch swallows the normal
-  // not-yet-confirmed 404" discipline as the R6 run-rediscovery effect
-  // above.
+  // PlanScale is page-scoped (reused by every run on this page), so it is
+  // rediscovered independently of any particular DetectionRun.
   useEffect(() => {
     let cancelled = false
     setPlanScale(null)
+    if (!projectId || !planId) return undefined
     legendApi
       .getPlanScale(projectId, planId, pageNumber)
       .then((scale) => {
@@ -141,10 +134,10 @@ export default function LegendWorkspace({
     }
   }, [projectId, planId, pageNumber])
 
-  // R7: manual corrections and the QuantityResult are scoped to the
-  // rediscovered DetectionRun (see the effect above) -- re-fetched
-  // whenever that run identity changes, including right after it is
-  // first rediscovered on a fresh reload.
+  // Manual corrections and the QuantityResult are scoped to the
+  // rediscovered DetectionRun -- re-fetched whenever that run identity
+  // changes, including right after it is first rediscovered on a fresh
+  // reload.
   useEffect(() => {
     let cancelled = false
     setManualCorrections([])
@@ -286,7 +279,7 @@ export default function LegendWorkspace({
     setActionError('')
     try {
       await legendApi.addToPatternLibrary(projectId, planId, activeEntryId)
-      setInLibrary(true)
+      refreshLibrary()
       onLibraryChanged?.()
     } catch (err) {
       setActionError(extractErrorMessage(err, 'Failed to add this pattern to the project library.'))
@@ -299,6 +292,7 @@ export default function LegendWorkspace({
     if (!activeEntryId) return
     setDetectionBusy(true)
     setActionError('')
+    setFeatureVersionOutdated(false)
     try {
       const run = await legendApi.startDetectionRun(projectId, planId, pageNumber, activeEntryId)
       setDetectionRun(run)
@@ -310,6 +304,7 @@ export default function LegendWorkspace({
       }
     } catch (err) {
       setActionError(extractErrorMessage(err, 'Detection V2 failed to run.'))
+      setFeatureVersionOutdated(extractErrorCode(err) === 'REFERENCE_FEATURE_VERSION_OUTDATED')
     } finally {
       setDetectionBusy(false)
     }
@@ -432,192 +427,77 @@ export default function LegendWorkspace({
       : null,
   ].filter(Boolean)
 
-  const draftDisplayRect = selection.draftRect
-    ? {
-        left: Math.min(selection.draftRect.startX, selection.draftRect.endX),
-        top: Math.min(selection.draftRect.startY, selection.draftRect.endY),
-        width: Math.abs(selection.draftRect.endX - selection.draftRect.startX),
-        height: Math.abs(selection.draftRect.endY - selection.draftRect.startY),
-      }
-    : null
+  const stages = deriveWorkflowStages({
+    hasProject: !!projectId,
+    plans,
+    hasPlanSelected: !!planId && !!pageNumber,
+    planScale,
+    pageLegendEntries: pageEntries,
+    activeEntryConfirmed: activeEntry?.status === 'confirmed',
+    hatchFeatures,
+    libraryEntries,
+    detectionRun,
+    detectedRegions,
+    quantityResult,
+  })
+  const currentStage = pickCurrentStage(stages)
 
-  return (
-    <div className="two-col">
-      <div className="card panel">
-        <strong>Plan Page {pageNumber}</strong>
-        <p className="muted">
-          {selection.mode
-            ? `Drawing ${MODE_LABELS[selection.mode] || selection.mode} -- drag a rectangle on the page.`
-            : 'Create or select a legend entry, then draw a pattern and description selection.'}
-        </p>
-        <div
-          className="plan-stage"
-          onMouseDown={selection.onMouseDown}
-          onMouseMove={selection.onMouseMove}
-          onMouseUp={selection.onMouseUp}
-          onMouseLeave={selection.onMouseUp}
-          ref={selection.containerRef}
-        >
-          {/* draggable={false} is load-bearing, not cosmetic: <img> is
-              natively draggable by default, and mousedown-then-move on an
-              undraggable-unset image makes Chromium hijack the gesture into
-              a native OS-level image drag after the first mousemove --
-              silently swallowing every mousemove/mouseup our own selection
-              handlers need. Found via real Playwright browser testing (a
-              curl-only check of the API can never catch this class of bug). */}
-          <img
-            alt={`Plan page ${pageNumber}`}
-            className="plan-image"
-            src={previewUrl}
-            onLoad={selection.onImageLoad}
-            draggable={false}
-          />
-          {overlays.map((overlay) => {
-            const display = normalizedToDisplayRect(overlay.rect, selection.viewSize)
-            if (!display) return null
-            return (
-              <div
-                key={overlay.kind}
-                className={`plan-overlay overlay-${overlay.kind}`}
-                style={{ left: display.left, top: display.top, width: display.width, height: display.height }}
-              />
-            )
-          })}
-          {detectedRegions.map((region) => {
-            const display = normalizedToDisplayRect(region, selection.viewSize)
-            if (!display) return null
-            return (
-              <div
-                key={region.id}
-                className={`plan-overlay overlay-detection-${region.status}`}
-                style={{ left: display.left, top: display.top, width: display.width, height: display.height }}
-              />
-            )
-          })}
-          {manualCorrections.map((correction) => {
-            const display = normalizedToDisplayRect(correction, selection.viewSize)
-            if (!display) return null
-            return (
-              <div
-                key={correction.id}
-                className={`plan-overlay overlay-${correction.correction_type}`}
-                style={{ left: display.left, top: display.top, width: display.width, height: display.height }}
-                data-testid={`manual-overlay-${correction.correction_type}`}
-              />
-            )
-          })}
-          {draftDisplayRect && (
-            <div
-              className="plan-overlay overlay-draft"
-              style={{
-                left: draftDisplayRect.left,
-                top: draftDisplayRect.top,
-                width: draftDisplayRect.width,
-                height: draftDisplayRect.height,
-              }}
-            />
-          )}
-        </div>
-        <div style={{ marginTop: 12 }}>
-          <LegendSelectionToolbar
-            mode={selection.mode}
-            disabled={!activeEntryId || actionBusy}
-            onStartPattern={() => selection.startMode('pattern')}
-            onStartDescription={() => selection.startMode('description')}
-            onCancel={selection.cancelMode}
-          />
-        </div>
-        {!activeEntryId && (
-          <p className="muted" style={{ marginTop: 8, fontSize: 13 }}>
-            Create or select a legend entry (right) to enable drawing a selection here.
-          </p>
-        )}
-      </div>
+  return {
+    // legend entries
+    entries: pageEntries,
+    entriesLoading,
+    entriesError,
+    activeEntryId,
+    setActiveEntryId,
+    activeEntry,
+    creating,
+    handleCreateNew,
 
-      <div>
-        <LegendEntryList
-          entries={pageEntries}
-          activeEntryId={activeEntryId}
-          onSelect={setActiveEntryId}
-          onCreateNew={handleCreateNew}
-          creating={creating}
-        />
-        {loading && <p className="muted">Loading legend entries...</p>}
-        {listError && <p className="error">{listError}</p>}
-        <div style={{ marginTop: 16 }}>
-          <LegendEntryEditor
-            entry={activeEntry}
-            patternCropSrc={
-              activeEntry?.has_pattern_selection
-                ? legendApi.patternCropUrl(projectId, planId, activeEntry.id, cropVersion)
-                : null
-            }
-            descriptionCropSrc={
-              activeEntry?.has_description_selection
-                ? legendApi.descriptionCropUrl(projectId, planId, activeEntry.id, cropVersion)
-                : null
-            }
-            busy={actionBusy}
-            error={actionError}
-            onRunOcr={handleRunOcr}
-            onSaveCorrection={handleSaveCorrection}
-            onConfirm={handleConfirm}
-            hatchFeatures={hatchFeatures}
-            featuresBusy={featuresBusy}
-            onComputeFeatures={handleComputeFeatures}
-            projectId={projectId}
-            planId={planId}
-            inLibrary={inLibrary}
-            libraryBusy={libraryBusy}
-            onAddToLibrary={handleAddToLibrary}
-          />
-        </div>
+    // legend entry editing
+    cropVersion,
+    actionBusy,
+    actionError,
+    handleRunOcr,
+    handleSaveCorrection,
+    handleConfirm,
 
-        {hatchFeatures && (
-          <div className="card panel" style={{ marginTop: 16 }}>
-            <DetectionPanel
-              run={detectionRun}
-              regions={detectedRegions}
-              busy={detectionBusy}
-              disabled={!activeEntryId}
-              onRunDetection={handleRunDetection}
-              onUpdateRegionStatus={handleUpdateRegionStatus}
-            />
-          </div>
-        )}
+    // hatch features / library
+    hatchFeatures,
+    featuresBusy,
+    handleComputeFeatures,
+    libraryEntries,
+    inLibrary,
+    libraryBusy,
+    handleAddToLibrary,
 
-        {detectionRun && detectionRun.status === 'completed' && (
-          <div className="card panel" style={{ marginTop: 16 }}>
-            <ManualCorrectionPanel
-              mode={selection.mode === 'manual_add' || selection.mode === 'manual_subtract' ? selection.mode : null}
-              corrections={manualCorrections}
-              busy={quantityBusy}
-              disabled={actionBusy}
-              onStartAdd={() => selection.startMode('manual_add')}
-              onStartSubtract={() => selection.startMode('manual_subtract')}
-              onCancel={selection.cancelMode}
-              onDeleteCorrection={handleDeleteManualCorrection}
-            />
-          </div>
-        )}
+    // detection / review
+    detectionRun,
+    detectedRegions,
+    detectionBusy,
+    featureVersionOutdated,
+    handleRunDetection,
+    handleUpdateRegionStatus,
 
-        {detectionRun && detectionRun.status === 'completed' && (
-          <div className="card panel" style={{ marginTop: 16 }}>
-            <QuantityPanel
-              scale={planScale}
-              quantity={quantityResult}
-              suggestedThicknessMm={activeEntry?.thickness_mm ?? null}
-              busy={quantityBusy}
-              disabled={false}
-              reviewCounts={reviewCounts}
-              onConfirmDeclaredScale={handleConfirmDeclaredScale}
-              onConfirmCalibratedScale={handleConfirmCalibratedScale}
-              onCalculate={handleCalculateQuantity}
-              onConfirmResult={handleConfirmQuantityResult}
-            />
-          </div>
-        )}
-      </div>
-    </div>
-  )
+    // manual corrections
+    manualCorrections,
+    handleDeleteManualCorrection,
+
+    // scale / quantity
+    planScale,
+    quantityResult,
+    quantityBusy,
+    handleConfirmDeclaredScale,
+    handleConfirmCalibratedScale,
+    handleCalculateQuantity,
+    handleConfirmQuantityResult,
+
+    // shared canvas
+    selection,
+    overlays,
+    reviewCounts,
+
+    // derived workflow status
+    stages,
+    currentStage,
+  }
 }

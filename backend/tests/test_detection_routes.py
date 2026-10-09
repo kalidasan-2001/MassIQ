@@ -31,6 +31,7 @@ from tests.db_test_support import build_test_engine, new_sessionmaker, truncate_
 
 from app.db.database import get_db
 from app.main import app
+from app.models.hatch_feature_set import HatchFeatureSet
 from app.schemas.legend_entry import LegendEntryUpdate
 from app.schemas.project import ProjectCreate
 from app.services.detection_service import DetectionService
@@ -199,6 +200,24 @@ class DetectionRoutesTests(unittest.TestCase):
             self._page_base(project_id=other_project.id), json={"legend_entry_id": reference_id}
         )
         self.assertIn(response.status_code, (400, 404))
+
+    def test_start_run_outdated_feature_version_returns_structured_400(self):
+        """R9 section 15 -- the route must return a structured, actionable
+        error (error_code + human message), not just a raw exception
+        string, so the frontend can render a specific fix-it action
+        instead of dumping backend internals."""
+        reference_id = self._confirmed_reference_id(hfx.family_a_parallel_45())
+        feature_set = self.session.query(HatchFeatureSet).filter_by(legend_entry_id=uuid.UUID(reference_id)).one()
+        feature_set.feature_version = "0.9-outdated"
+        self.session.commit()
+
+        response = self.client.post(self._page_base(), json={"legend_entry_id": reference_id})
+        self.assertEqual(response.status_code, 400)
+        detail = response.json()["detail"]
+        self.assertEqual(detail["error_code"], "REFERENCE_FEATURE_VERSION_OUTDATED")
+        self.assertIn("Recompute the hatch features", detail["message"])
+        self.assertEqual(detail["reference_feature_version"], "0.9-outdated")
+        self.assertNotEqual(detail["current_feature_version"], "0.9-outdated")
 
     # -- get run / regions -----------------------------------------------
 

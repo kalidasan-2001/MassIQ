@@ -117,19 +117,12 @@ test.describe('E2E-05: project pattern library (real pointer/mouse input)', () =
     await expect(page.locator('#legend-material-name')).toHaveValue('Stahlbeton C25/30')
 
     // -- Reload: the decision (and the library, and computed features)
-    // must all still be there, purely from server state. --
+    // must all still be there, purely from server state. R9 adds
+    // URL-based workflow state (section 30): project/plan/page are
+    // restored automatically from the URL on reload. --
     await page.reload({ waitUntil: 'networkidle' })
     const section = r3Section(page)
-    await section.locator('select').first().selectOption({ label: projectName })
-    await page.waitForFunction(
-      () => {
-        const select = document.querySelectorAll('select')[1]
-        return select && select.options.length > 1
-      },
-      null,
-      { timeout: 10000 }
-    )
-    await section.locator('select').nth(1).selectOption({ index: 1 })
+    await waitForPersistedPreview(page)
 
     // Re-select the second (query) legend entry -- the most recently
     // created list item. The decision-history GET fires as soon as

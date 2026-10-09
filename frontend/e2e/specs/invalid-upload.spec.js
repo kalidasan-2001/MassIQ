@@ -29,7 +29,7 @@ test.describe('negative path: invalid PDF upload', () => {
     await expect(legacy.getByText('Recovered Plan Workspace')).toHaveCount(0)
 
     // The rest of the app must still be fully usable -- not a white screen.
-    await expect(page.getByRole('heading', { name: 'Legend Workflow (R3)' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Project Workflow' })).toBeVisible()
     await expect(legacy.getByRole('button', { name: 'Upload Floor Plan PDF' })).toBeEnabled()
 
     // The console monitor only fails on unexpected errors/5xx -- a 400
@@ -50,9 +50,10 @@ test.describe('negative path: invalid PDF upload', () => {
     await expect(section.locator('.error')).toBeVisible({ timeout: 10000 })
     await expect(section.locator('.error')).not.toContainText('Traceback')
 
-    // No misleading successful Plan state: the plan picker must not gain
-    // a "ready" entry for this failed upload.
-    await expect(section.locator('select').nth(1)).not.toContainText('ready')
+    // No misleading successful Plan state: the Plans stage must not gain
+    // a "Ready" entry for this failed upload (R9 renamed the plan picker
+    // from a <select> to a status-pill list -- see PlansStage.jsx).
+    await expect(section.getByText('Ready', { exact: true })).toHaveCount(0)
 
     // The project itself must remain usable -- the failed upload must not
     // have broken the picker or the rest of the workflow.

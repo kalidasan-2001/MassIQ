@@ -35,7 +35,12 @@ test.describe('E2E-03: legend workflow (real pointer/mouse input)', () => {
     await setUpProjectAndPlan(page)
 
     await createLegendEntry(page)
-    await expect(page.locator('.status-pill').last()).toHaveText('draft')
+    // R9: scoped to the editor's own status pill (data-testid), not a
+    // fragile ".last()" class match -- the app now has many more
+    // `.status-pill` elements on the page (WorkflowNav's 8 stage badges,
+    // the legacy tool's own pills), so DOM-order-based matching is no
+    // longer reliable (R9 section 43: prefer testids over DOM order).
+    await expect(page.getByTestId('legend-status-pill')).toHaveText('draft')
 
     // Real drag over the fixture's known hatch-pattern region.
     await dragSelectRegion(page, 'pattern', PATTERN_REGION)
@@ -48,7 +53,7 @@ test.describe('E2E-03: legend workflow (real pointer/mouse input)', () => {
     await runOcr(page)
     const ocrText = await page.locator('#legend-raw-ocr-text').inputValue()
     expect(ocrText).toContain(EXPECTED_OCR_SUBSTRING)
-    await expect(page.locator('.status-pill').last()).toHaveText('ocr_complete')
+    await expect(page.getByTestId('legend-status-pill')).toHaveText('ocr_complete')
 
     await saveCorrection(page, {
       correctedText: 'Stahlbeton C25/30, d=20 cm (corrected by E2E)',
@@ -58,7 +63,7 @@ test.describe('E2E-03: legend workflow (real pointer/mouse input)', () => {
 
     const confirmResponse = await confirmLegendEntry(page)
     expect(confirmResponse.status()).toBe(200)
-    await expect(page.locator('.status-pill.status-completed').first()).toBeVisible()
+    await expect(page.getByTestId('legend-status-pill')).toHaveClass(/status-completed/)
 
     // The confirmed entry must also show up in the entry list, not only in
     // the editor panel -- a user-visible result, not an implementation

@@ -21,10 +21,12 @@ test.describe('E2E-01: application smoke @smoke', () => {
 
     await page.goto('/')
 
-    // Legacy MVP hero + the new R3 section both present -- confirms the
-    // whole app shell rendered, not just one half of it.
-    await expect(page.getByRole('heading', { name: /Business MVP for automated quantity takeoff/i })).toBeVisible()
-    await expect(page.getByRole('heading', { name: 'Legend Workflow (R3)' })).toBeVisible()
+    // The canonical Project Workflow hero + the legacy single-session tool
+    // section both present -- confirms the whole app shell rendered, not
+    // just one half of it (R9: canonical workflow is now primary/first).
+    await expect(page.getByRole('heading', { name: /Construction quantity takeoff/i })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Project Workflow' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Legacy single-session tool' })).toBeVisible()
 
     monitor.assertClean()
   })

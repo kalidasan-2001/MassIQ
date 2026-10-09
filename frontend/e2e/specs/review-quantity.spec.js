@@ -153,26 +153,20 @@ test.describe('E2E-07: Review & Quantity workflow (real pointer/mouse input)', (
 
     // -- Reload: every review/correction/scale/dimension/quantity decision
     // must persist purely from server state (R7 sections 29/49), same
-    // pattern already proven by E2E-06/persistence.spec.js. --
+    // pattern already proven by E2E-06/persistence.spec.js. R9 adds
+    // URL-based workflow state (section 30): project/plan/page are
+    // restored automatically from the URL on reload, no manual
+    // re-selection needed. --
     await page.reload({ waitUntil: 'networkidle' })
     const section = r3Section(page)
-    await section.locator('select').first().selectOption({ label: projectName })
-    await page.waitForFunction(
-      () => {
-        const select = document.querySelectorAll('select')[1]
-        return select && select.options.length > 1
-      },
-      null,
-      { timeout: 10000 }
-    )
-    await section.locator('select').nth(1).selectOption({ index: 1 })
+    await waitForPersistedPreview(page)
 
     // Re-select the (only) legend entry so the features/detection panel
     // renders again (mirrors E2E-06). Scoped to the legend entry list
     // specifically -- R8's Results panel now also displays the material
     // name elsewhere on the same page, so an unscoped text match is
     // ambiguous.
-    await page.getByTestId('legend-entry-list').getByText('Stahlbeton C25/30').first().click()
+    await section.getByTestId('legend-entry-list').getByText('Stahlbeton C25/30').first().click()
     await expect(page.getByText('Computed', { exact: true })).toBeVisible()
 
     await expect(page.getByTestId('detected-region-list')).toBeVisible({ timeout: 10000 })

@@ -12,11 +12,21 @@ function uniqueName(prefix) {
   return `${prefix} ${Date.now()}-${Math.floor(Math.random() * 100000)}`
 }
 
-/** Scopes every locator to the R3 section so nothing here ever accidentally
- * matches the legacy UploadPanel/PlanViewer markup, which has its own
- * similarly-named controls (file input, "Select"-style buttons, etc). */
+/** Scopes every locator to the persisted-project workflow section so
+ * nothing here ever accidentally matches the legacy UploadPanel/PlanViewer
+ * markup, which has its own similarly-named controls (file input,
+ * "Select"-style buttons, etc). Named r3Section for historical reasons
+ * (introduced in R3); R9 renamed the on-page heading to "Project Workflow"
+ * but every spec that already imports r3Section keeps working unchanged. */
 function r3Section(page) {
-  return page.locator('section', { hasText: 'Legend Workflow (R3)' })
+  return page.getByTestId('project-workflow-root')
+}
+
+/** R9: clicks a stage tab in the WorkflowNav (e.g. 'legend', 'analysis',
+ * 'plan_preparation') to make that stage's pane active, overriding
+ * whichever stage auto-advance currently has selected. */
+async function gotoStage(page, stageKey) {
+  await page.getByTestId(`workflow-stage-${stageKey}`).click()
 }
 
 async function createProject(page, name) {
@@ -34,19 +44,30 @@ async function createProject(page, name) {
   )
 }
 
+/** R9 E2E-09: re-selects an already-existing project from the picker --
+ * for proving persistence survives a genuinely cold navigation (goto('/')
+ * with no query params), distinct from a same-URL reload (which restores
+ * via useWorkflowUrlState instead -- see ProjectWorkflow.jsx). */
+async function selectExistingProject(page, name) {
+  const section = r3Section(page)
+  await section.locator('select').first().selectOption({ label: name })
+}
+
 async function uploadPlan(page, { pdfPath = FIXTURE_PDF } = {}) {
   const section = r3Section(page)
+  // Waits on the real network response rather than polling for a specific
+  // DOM element: R9's stage navigation means the Plans stage's own picker
+  // can legitimately unmount (auto-advancing to Legend) the instant the
+  // upload succeeds, so asserting against a some-select's-options snapshot
+  // is a race. Every other mutating helper in this file already waits on
+  // its response the same way (confirmDeclaredScale, calculateQuantity,
+  // etc.) -- this just matches that established, more robust pattern.
+  const responsePromise = page.waitForResponse(
+    (res) => /\/plans$/.test(new URL(res.url()).pathname) && res.request().method() === 'POST'
+  )
   await section.locator('input[type="file"]').setInputFiles(pdfPath)
   await section.getByRole('button', { name: 'Upload Plan' }).click()
-  const filename = path.basename(pdfPath)
-  await page.waitForFunction(
-    (name) => {
-      const select = document.querySelectorAll('select')[1]
-      return select && [...select.options].some((o) => o.text.includes(name))
-    },
-    filename,
-    { timeout: 20000 }
-  )
+  await responsePromise
 }
 
 async function waitForPersistedPreview(page) {
@@ -204,7 +225,9 @@ module.exports = {
   FIXTURE_PDF,
   uniqueName,
   r3Section,
+  gotoStage,
   createProject,
+  selectExistingProject,
   uploadPlan,
   waitForPersistedPreview,
   createLegendEntry,

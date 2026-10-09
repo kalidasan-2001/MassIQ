@@ -92,25 +92,20 @@ test.describe('E2E-06: Detection Engine V2 (real pointer/mouse input)', () => {
     await expect(page.getByTestId('detected-region-list').getByText('rejected')).toBeVisible()
 
     // -- Reload: run + region decisions must persist, purely from server
-    // state (R6 section 24). --
+    // state (R6 section 24). R9 adds URL-based workflow state (section
+    // 30), so project/plan/page are restored automatically from the URL
+    // on reload -- no manual re-selection needed, unlike before R9. --
     await page.reload({ waitUntil: 'networkidle' })
     const section = r3Section(page)
-    await section.locator('select').first().selectOption({ label: projectName })
-    await page.waitForFunction(
-      () => {
-        const select = document.querySelectorAll('select')[1]
-        return select && select.options.length > 1
-      },
-      null,
-      { timeout: 10000 }
-    )
-    await section.locator('select').nth(1).selectOption({ index: 1 })
+    await waitForPersistedPreview(page)
 
     // Re-select the (only) legend entry so the features/detection panel
-    // renders again. Scoped to the legend entry list specifically -- R8's
-    // Results panel now also displays the material name elsewhere on the
-    // same page, so an unscoped text match is ambiguous.
-    await page.getByTestId('legend-entry-list').getByText('Stahlbeton C25/30').first().click()
+    // renders again -- entry selection itself is not URL-persisted by
+    // design (see docs/architecture/PRODUCT_WORKFLOW.md). Scoped to the
+    // legend entry list specifically -- R8's Results panel now also
+    // displays the material name elsewhere on the same page, so an
+    // unscoped text match is ambiguous.
+    await section.getByTestId('legend-entry-list').getByText('Stahlbeton C25/30').first().click()
     await expect(page.getByText('Computed', { exact: true })).toBeVisible()
 
     await expect(page.getByTestId('detected-region-list')).toBeVisible({ timeout: 10000 })

@@ -40,19 +40,11 @@ test.describe('E2E-04: persistence across reload', () => {
     // Simulate closing/reopening the app.
     await page.reload({ waitUntil: 'networkidle' })
 
-    // State resets client-side on reload -- re-select the same project and
-    // plan through the UI exactly as a returning user would.
+    // R9 adds URL-based workflow state (section 30): project/plan/page are
+    // restored automatically from the URL on reload -- a returning user
+    // does not need to re-pick them through the UI.
     const section = r3Section(page)
-    await section.locator('select').first().selectOption({ label: projectName })
-    await page.waitForFunction(
-      (label) => {
-        const select = document.querySelectorAll('select')[1]
-        return select && select.options.length > 1
-      },
-      null,
-      { timeout: 10000 }
-    )
-    await section.locator('select').nth(1).selectOption({ index: 1 })
+    await waitForPersistedPreview(page)
 
     // The confirmed entry must reappear in the list purely from server
     // state -- nothing here was re-created. Matched by class + exact
